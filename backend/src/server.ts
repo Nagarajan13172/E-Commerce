@@ -5,6 +5,10 @@ import { logger } from './config/logger.js';
 import { connectDatabase, disconnectDatabase } from './config/db.js';
 import { storage } from './integrations/storage/index.js';
 import { cache } from './integrations/cache/index.js';
+import { registerNotificationHandlers } from './events/handlers/notification.handlers.js';
+// Imported for its side effect: every Mongoose model must be registered before
+// any query runs `populate()`, which throws MissingSchemaError otherwise.
+import './models/index.js';
 
 /**
  * Process lifecycle: ordered startup, and a shutdown that actually finishes
@@ -29,6 +33,10 @@ async function bootstrap(): Promise<void> {
   } catch (err) {
     logger.warn({ err }, 'Object storage unavailable at boot — uploads will fail until it returns');
   }
+
+  // Subscribe domain-event handlers before the server accepts traffic, so no
+  // event emitted by an early request is dropped.
+  registerNotificationHandlers();
 
   const app = createApp();
 

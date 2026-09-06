@@ -53,7 +53,12 @@ const reviewSchema = new Schema<IReview, Model<IReview>>(
       max: REVIEW_LIMITS.MAX_RATING,
     },
     title: { type: String, maxlength: 120, trim: true },
-    comment: { type: String, required: true, maxlength: REVIEW_LIMITS.MAX_COMMENT_LENGTH, trim: true },
+    comment: {
+      type: String,
+      required: true,
+      maxlength: REVIEW_LIMITS.MAX_COMMENT_LENGTH,
+      trim: true,
+    },
     images: { type: [String], default: [] },
 
     isVerifiedPurchase: { type: Boolean, default: true },

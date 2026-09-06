@@ -58,7 +58,14 @@ const objectIdArray = (ref: string) => ({
 
 const couponSchema = new Schema<ICoupon, Model<ICoupon>>(
   {
-    code: { type: String, required: true, unique: true, uppercase: true, trim: true, maxlength: 32 },
+    code: {
+      type: String,
+      required: true,
+      unique: true,
+      uppercase: true,
+      trim: true,
+      maxlength: 32,
+    },
     description: { type: String, maxlength: 300 },
     type: { type: String, enum: COUPON_TYPES, required: true },
     value: { type: Number, required: true, min: 0 },

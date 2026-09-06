@@ -1,5 +1,10 @@
 import { Schema, model, type HydratedDocument, type Model, type Types } from 'mongoose';
-import { PAYMENT_STATUSES, PAYMENT_METHODS, type PaymentStatus, type PaymentMethod } from '@ecom/shared';
+import {
+  PAYMENT_STATUSES,
+  PAYMENT_METHODS,
+  type PaymentStatus,
+  type PaymentMethod,
+} from '@ecom/shared';
 
 /**
  * A payment attempt against an order.

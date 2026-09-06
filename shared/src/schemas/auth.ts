@@ -21,7 +21,10 @@ export const registerSchema = z
     message: 'Passwords do not match',
     path: ['confirmPassword'],
   });
+/** Parsed result — what a submit handler receives. */
 export type RegisterInput = z.infer<typeof registerSchema>;
+/** Pre-parse shape — what the form's fields hold (defaults not yet applied). */
+export type RegisterFormValues = z.input<typeof registerSchema>;
 
 export const loginSchema = z.object({
   email: emailSchema,
@@ -29,6 +32,7 @@ export const loginSchema = z.object({
   rememberMe: z.boolean().default(false),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
+export type LoginFormValues = z.input<typeof loginSchema>;
 
 export const forgotPasswordSchema = z.object({ email: emailSchema });
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;

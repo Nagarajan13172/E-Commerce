@@ -1,5 +1,11 @@
 import { Schema, model, type HydratedDocument, type Model, type Types } from 'mongoose';
-import { USER_ROLES, USER_STATUSES, ADDRESS_LABELS, type UserRole, type UserStatus } from '@ecom/shared';
+import {
+  USER_ROLES,
+  USER_STATUSES,
+  ADDRESS_LABELS,
+  type UserRole,
+  type UserStatus,
+} from '@ecom/shared';
 
 export interface IAddress {
   _id: Types.ObjectId;
@@ -128,12 +134,13 @@ const userSchema = new Schema<IUser, UserModelType, IUserMethods>(
       transform(_doc, ret) {
         // Defence in depth: even if a query explicitly selected these, they must
         // never reach a response body.
-        delete ret.passwordHash;
-        delete ret.tokenVersion;
-        delete ret.failedLoginAttempts;
-        delete ret.lockedUntil;
-        delete ret.__v;
-        return ret;
+        const plain = ret as Record<string, unknown>;
+        delete plain.passwordHash;
+        delete plain.tokenVersion;
+        delete plain.failedLoginAttempts;
+        delete plain.lockedUntil;
+        delete plain.__v;
+        return plain;
       },
     },
   },
@@ -158,7 +165,7 @@ userSchema.methods.defaultShippingAddress = function defaultShippingAddress(
  * Exactly one address may be the default for each purpose. Enforcing it here
  * rather than in the service means it holds no matter which code path writes.
  */
-userSchema.pre('save', function normaliseDefaultAddresses(next) {
+userSchema.pre('save', function normaliseDefaultAddresses() {
   if (this.isModified('addresses') && this.addresses.length > 0) {
     for (const field of ['isDefaultShipping', 'isDefaultBilling'] as const) {
       const flagged = this.addresses.filter((a) => a[field]);
@@ -172,7 +179,6 @@ userSchema.pre('save', function normaliseDefaultAddresses(next) {
       }
     }
   }
-  next();
 });
 
 export const User = model<IUser, UserModelType>('User', userSchema);

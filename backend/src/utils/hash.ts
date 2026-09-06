@@ -19,7 +19,7 @@ import argon2 from 'argon2';
  * memory, 2 iterations, 1 degree of parallelism. Memory cost is the important
  * dial — it is what makes GPU and ASIC attacks uneconomic.
  */
-const ARGON2_OPTIONS: argon2.Options = {
+const ARGON2_OPTIONS: argon2.HashOptions = {
   type: argon2.argon2id,
   memoryCost: 19456,
   timeCost: 2,

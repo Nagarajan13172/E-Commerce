@@ -48,8 +48,35 @@ export const productQuerySchema = z.object({
   attributes: z.record(z.string(), z.array(z.string())).optional(),
 
   sort: z.enum(PRODUCT_SORTS).default('relevance'),
-  page: z.coerce.number().int().min(1).default(PAGINATION.DEFAULT_PAGE),
-  limit: z.coerce.number().int().min(1).max(PAGINATION.MAX_LIMIT).default(PAGINATION.DEFAULT_LIMIT),
+  /**
+   * Pagination is CLAMPED here, not rejected.
+   *
+   * This schema parses a user-editable, shareable URL. `?page=abc` or
+   * `?limit=99999` should quietly fall back to something sensible rather than
+   * 422-ing the whole listing page — a mangled link someone pasted into chat
+   * must still render a product grid. `.catch()` absorbs non-numeric junk;
+   * the transform bounds the rest, so an attacker cannot force a 10,000-row
+   * query no matter what they put in the URL.
+   *
+   * The admin listing schema deliberately stays strict: it is called by our own
+   * code, where a bad value is a bug worth surfacing rather than hiding.
+   */
+  page: z.coerce
+    .number()
+    .int()
+    .catch(PAGINATION.DEFAULT_PAGE)
+    // Below 1 is nonsense rather than a near miss, so fall back to page 1.
+    .transform((value) => (value < 1 ? PAGINATION.DEFAULT_PAGE : value)),
+  limit: z.coerce
+    .number()
+    .int()
+    .catch(PAGINATION.DEFAULT_LIMIT)
+    // Too large is clamped to the ceiling (they wanted "lots"); zero or negative
+    // is meaningless, so it falls back to the default rather than to 1, which
+    // would render a one-item page.
+    .transform((value) =>
+      value < 1 ? PAGINATION.DEFAULT_LIMIT : Math.min(value, PAGINATION.MAX_LIMIT),
+    ),
 });
 
 export type ProductQuery = z.infer<typeof productQuerySchema>;

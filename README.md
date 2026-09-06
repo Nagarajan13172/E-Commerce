@@ -36,8 +36,8 @@ decision in the codebase:
 **Backend** — Node 24, Express 5, MongoDB 8 (replica set), Mongoose 9, Zod 4, argon2,
 pino, AWS S3 SDK (against MinIO), ioredis, nodemailer, Vitest + Supertest.
 
-**Frontend** — React 19, Vite 8, TypeScript 6, React Router 8, TanStack Query 5,
-Tailwind CSS 4, shadcn/ui, lucide-react, React Hook Form, Zustand, axios.
+**Frontend** — React 19, Vite 8, TypeScript 6, React Router 8, Redux Toolkit 2,
+TanStack Query 5, Tailwind CSS 4, shadcn/ui, lucide-react, React Hook Form, axios.
 
 **Infrastructure** — Docker Compose: MongoDB, MinIO, Redis, Mailpit, mongo-express.
 
@@ -219,6 +219,24 @@ browser. That is why a shared URL like
 is guaranteed to mean the same thing on both sides: there is no second, drifting copy of
 the parsing rules.
 
+### State management
+
+Two layers, split by who owns the data:
+
+- **Redux Toolkit** owns _client_ state — the session (`authSlice`) and interface
+  state such as open drawers and theme (`uiSlice`). Access it through the typed
+  `useAppDispatch` / `useAppSelector` hooks in `frontend/src/store/hooks.ts`, never the
+  bare react-redux ones.
+- **TanStack Query** owns _server_ state — products, cart, orders. This data is not
+  mirrored into Redux: doing so would mean hand-rolling caching, deduplication and
+  invalidation, and keeping a second copy of the truth that can silently disagree with
+  the database.
+
+Tokens are never in the store. They live in httpOnly cookies the app cannot read, so
+"am I signed in?" is answered by asking the server (`/auth/me`), not by inspecting a
+token. `AppProviders` wires the axios refresh interceptor back to Redux through a
+registered callback rather than a direct import, keeping the dependency one-directional.
+
 ### Authentication
 
 - **Access token** — JWT, 15 minutes, httpOnly cookie. Carries a `tokenVersion` claim, so
@@ -257,6 +275,142 @@ Not every dependency is equal, and the code says so explicitly:
 
 ---
 
+## Seed data
+
+```bash
+pnpm seed            # populate an empty database
+pnpm seed --fresh    # wipe and repopulate
+```
+
+Produces 27 categories nested three levels deep, 10 brands, 20 products with 79
+variants, 71 reviews and 4 coupons.
+
+The catalog is deliberately _uneven_: some variants are out of stock, twelve products
+sit below their low-stock threshold, one product is entirely sold out, and prices span
+₹749 to ₹1,64,999. A uniform catalog would let the availability filter, the low-stock
+report and the price facet all ship broken while looking fine.
+
+**Development sign-ins** (password `Password123` for all):
+
+| Email                  | Role     | Notes                                      |
+| ---------------------- | -------- | ------------------------------------------ |
+| `admin@aurora.local`   | admin    | All 22 permissions                         |
+| `manager@aurora.local` | manager  | Catalog and orders, but cannot grant roles |
+| `support@aurora.local` | support  | Read-only; cannot refund or change prices  |
+| `priya@example.com`    | customer | Has a saved address                        |
+| `neha@example.com`     | customer | Email deliberately unverified              |
+
+---
+
+## Storefront
+
+| Route                                                                             | What it does                                                           |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `/`                                                                               | Data-driven homepage — hero, categories, trending, new arrivals, deals |
+| `/products`                                                                       | Listing with facets, sorting, pagination; all filter state in the URL  |
+| `/products/:slug`                                                                 | Product detail with gallery, variant matrix, specs, related            |
+| `/cart`                                                                           | Full bag; the drawer opens from the header on any page                 |
+| `/account`                                                                        | Overview, addresses, wishlist                                          |
+| `/login` · `/register` · `/forgot-password` · `/reset-password` · `/verify-email` | Auth                                                                   |
+
+### Filters live in the URL
+
+`useProductFilters` parses `useSearchParams()` with **the same `parseProductQuery` the
+API validates with**. A link like
+
+```
+/products?category=fashion&brand=stride&minPrice=5000&rating=4&inStock=1&sort=price_asc
+```
+
+therefore means exactly the same thing in the browser and on the server — there is no
+second copy of the parsing rules to drift. It also makes the view shareable and
+bookmarkable, gives correct back/forward behaviour, and hands React Query a natural
+cache key for free.
+
+### The variant matrix
+
+The hard part of a variant picker is telling the customer which combinations exist
+_before_ they click one. `useVariantSelection` derives, for every option value,
+whether it is available **given the other current selections** — so picking a colour
+immediately marks the sizes that colour does not come in.
+
+Three states, and the distinction matters:
+
+- **does not exist** — no variant has this value. Disabled.
+- **not with your other choices** — struck through but still clickable. Selecting it
+  clears whichever other choice was blocking it. Disabling these instead would trap a
+  customer who happened to pick their size before their colour.
+- **out of stock** — a real combination with no stock. Selectable, so its price stays
+  visible.
+
+### Guest carts
+
+Anonymous shoppers get a cart keyed by a random id in an httpOnly cookie — forcing an
+account before the bag is the single largest source of abandonment. On sign-in the
+guest bag is **merged** into the account cart, summing duplicate lines and capping each
+at live stock. A merge failure is logged and swallowed: losing a cart is far better
+than being unable to log in.
+
+Cart reads never trust stored prices. Every line is re-priced from the live product on
+every read, and a changed price is surfaced to the customer rather than silently
+applied.
+
+### Session hint
+
+The refresh token is httpOnly and unreadable by scripts, so the SPA cannot tell whether
+one exists. A non-secret `has_session` cookie says so, and the axios interceptor only
+attempts a token refresh when it is present. Without it, every anonymous page load
+fired a guaranteed-to-fail `POST /auth/refresh` — two wasted round trips on the most
+common kind of visit.
+
+---
+
+## Search and filtering
+
+A listing request is **one aggregation**. `$facet` returns the page of results, the
+total count and every facet bucket together, so the grid, the result count and the
+sidebar are a single round trip rather than six.
+
+Filtering, sorting and pagination all execute in MongoDB. Nothing is loaded into Node
+to be filtered there — that pattern survives a seeded catalog and collapses on a real one.
+
+Two details worth knowing:
+
+**Facets exclude their own dimension.** Brand counts are computed _without_ the brand
+filter applied. After ticking "Lumen" you can still see how many Stride products are
+available; a facet that collapsed to only the current selection would make a
+multi-select filter impossible to widen again.
+
+**Every sort ends with `_id` as a tiebreaker.** Without it, documents with equal sort
+keys can be ordered differently between page 1 and page 2, so items appear twice or
+vanish while paging.
+
+The `SearchService` interface exists because MongoDB `$text` is the weakest part of
+this stack — no typo tolerance, no synonyms. Autocomplete deliberately does _not_ use
+it (a text index matches whole words, so typing "lin" would find nothing until the user
+finished "linen") and uses a substring regex instead, which is O(collection) and is
+exactly the point at which an Atlas Search or Elasticsearch adapter replaces this one,
+with no change above the interface.
+
+---
+
+## Media uploads
+
+The flow is **presign → direct browser PUT → confirm**, so image bytes never pass
+through Node.
+
+The security consequence is that the server never sees the upload, so `confirm`
+re-verifies everything the client claimed against the object that actually landed: its
+real size, and its **magic bytes**. Trusting the declared `Content-Type` would let a
+renamed script be served from our own origin. Anything that fails verification is
+deleted from the bucket, not merely rejected.
+
+Confirmed uploads then get three responsive WebP derivatives and a base64 blur
+placeholder generated in the background, so the admin sees the image immediately rather
+than waiting on three resizes.
+
+---
+
 ## Testing
 
 ```bash
@@ -266,6 +420,21 @@ pnpm test:backend
 Integration tests run against an in-memory **`MongoMemoryReplSet`**, not a standalone
 server — otherwise the transaction-based inventory logic, which is the single most
 important thing to test, could not be exercised at all.
+
+Email is captured rather than sent: under `NODE_ENV=test` the `EmailProvider` resolves to
+an in-memory recorder, so tests can assert that a message was sent and read the one-time
+token out of its body — exactly as a real user does by clicking the link. Tokens are
+stored hashed, so the email really is the only place the plaintext exists.
+
+The suite deliberately encodes security properties, not just happy paths: refresh-token
+reuse revoking a whole family, login not leaking which emails have accounts, a
+`{"$ne": null}` payload failing validation before it reaches Mongoose, and a
+client-supplied `role: "admin"` being stripped at registration.
+
+`adminAuthz.test.ts` enumerates **every** admin route and asserts 401 for anonymous
+callers, 403 for customers, and 403 for `support` on each write endpoint. The list is
+exhaustive rather than sampled on purpose: an unguarded admin endpoint is the single
+worst bug this codebase could ship, and a sample would let one through.
 
 ---
 

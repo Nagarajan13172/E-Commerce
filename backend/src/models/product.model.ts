@@ -145,7 +145,13 @@ const variantSchema = new Schema<IProductVariant>(
   {
     sku: { type: String, required: true, trim: true, uppercase: true },
     optionValues: {
-      type: [{ _id: false, name: { type: String, required: true }, value: { type: String, required: true } }],
+      type: [
+        {
+          _id: false,
+          name: { type: String, required: true },
+          value: { type: String, required: true },
+        },
+      ],
       default: [],
     },
     price: { type: Number, required: true, min: 0 },
@@ -213,7 +219,9 @@ const productSchema = new Schema<IProduct, Model<IProduct>>(
     variants: { type: [variantSchema], default: [] },
 
     attributes: {
-      type: [{ _id: false, k: { type: String, required: true }, v: { type: String, required: true } }],
+      type: [
+        { _id: false, k: { type: String, required: true }, v: { type: String, required: true } },
+      ],
       default: [],
     },
     specifications: {
@@ -320,7 +328,7 @@ productSchema.index({ deletedAt: 1 });
  * single place where "price range" is defined, so an admin edit, a bulk import
  * and the seed script cannot each compute it slightly differently.
  */
-productSchema.pre('save', function recomputeRollups(next) {
+productSchema.pre('save', function recomputeRollups() {
   const activeVariants = this.variants.filter((v) => v.isActive);
 
   if (activeVariants.length > 0) {
@@ -363,8 +371,6 @@ productSchema.pre('save', function recomputeRollups(next) {
   }
 
   if (this.status === 'active' && !this.publishedAt) this.publishedAt = new Date();
-
-  next();
 });
 
 export const Product = model<IProduct>('Product', productSchema);

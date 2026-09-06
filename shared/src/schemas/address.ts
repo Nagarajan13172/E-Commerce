@@ -20,6 +20,7 @@ export const addressSchema = z.object({
   isDefaultBilling: z.boolean().default(false),
 });
 export type AddressInput = z.infer<typeof addressSchema>;
+export type AddressFormValues = z.input<typeof addressSchema>;
 
 export const updateAddressSchema = addressSchema.partial();
 export type UpdateAddressInput = z.infer<typeof updateAddressSchema>;

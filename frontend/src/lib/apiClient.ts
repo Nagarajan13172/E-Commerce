@@ -46,6 +46,8 @@ export class ApiError extends Error {
 
 const CSRF_COOKIE = 'csrf_token';
 const CSRF_HEADER = 'X-CSRF-Token';
+/** Set by the server whenever a refresh token exists. Carries no secret. */
+const SESSION_HINT_COOKIE = 'has_session';
 
 function readCookie(name: string): string | undefined {
   return document.cookie
@@ -63,10 +65,33 @@ export const apiClient: AxiosInstance = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+/**
+ * Make sure a CSRF token exists before a state-changing request needs one.
+ *
+ * The token arrives on the response to any request, so it is normally already
+ * there. The exception is a cold load whose very first completed request is the
+ * mutation itself — then the header would be missing and the server would
+ * correctly reject it with 403. One cheap GET closes that race.
+ */
+let csrfPrimer: Promise<void> | null = null;
+
+async function ensureCsrfToken(): Promise<void> {
+  if (readCookie(CSRF_COOKIE)) return;
+  csrfPrimer ??= apiClient
+    .get('/auth/csrf')
+    .then(() => undefined)
+    .catch(() => undefined)
+    .finally(() => {
+      csrfPrimer = null;
+    });
+  return csrfPrimer;
+}
+
 // ── Request: attach the CSRF token on state-changing calls ───────────────────
-apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   const method = (config.method ?? 'get').toUpperCase();
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    await ensureCsrfToken();
     const token = readCookie(CSRF_COOKIE);
     if (token) config.headers.set(CSRF_HEADER, decodeURIComponent(token));
   }
@@ -121,8 +146,20 @@ apiClient.interceptors.response.use(
     }
 
     const { status, data } = error.response;
+
+    /**
+     * Only attempt a refresh when the browser actually holds a refresh token.
+     *
+     * The token is httpOnly and unreadable, so without the server's `has_session`
+     * hint every anonymous visitor would fire a guaranteed-to-fail POST
+     * /auth/refresh on page load — two wasted round trips on the single most
+     * common kind of visit.
+     */
+    const hasSession = readCookie(SESSION_HINT_COOKIE) === '1';
+
     const isRefreshable =
       status === 401 &&
+      hasSession &&
       config &&
       !config._retried &&
       !NO_REFRESH_PATHS.some((path) => config.url?.includes(path));

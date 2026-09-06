@@ -1,0 +1,153 @@
+# Development infrastructure for the Aurora e-commerce platform.
+#
+#   docker compose up -d          start everything
+#   docker compose ps             health status
+#   docker compose logs -f mongo  follow one service
+#   docker compose down           stop (data survives)
+#   docker compose down -v        stop AND wipe all volumes (full reset)
+#
+# The API and web app run on the host via `pnpm dev` by default. To run them in
+# containers instead:  docker compose --profile apps up -d
+
+name: aurora-ecommerce
+
+services:
+  # ── MongoDB ────────────────────────────────────────────────────────────────
+  # Runs as a single-node REPLICA SET. This is not optional: multi-item checkout
+  # reserves stock inside a transaction, and MongoDB transactions are unavailable
+  # on a standalone mongod. Clients connect with ?directConnection=true so the
+  # hostname the replica set advertises doesn't matter (works from host and from
+  # sibling containers alike).
+  mongo:
+    image: mongo:8
+    container_name: aurora-mongo
+    restart: unless-stopped
+    command: ['--replSet', 'rs0', '--bind_ip_all']
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # One-shot: initiates the replica set if it isn't already initiated. Safe to
+  # re-run — it exits 0 when the set already exists.
+  mongo-init:
+    image: mongo:8
+    container_name: aurora-mongo-init
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: 'no'
+    volumes:
+      - ./docker/mongo/init-replica.js:/scripts/init-replica.js:ro
+    entrypoint:
+      ['mongosh', '--host', 'mongo:27017', '--quiet', '--file', '/scripts/init-replica.js']
+
+  # ── MinIO (S3-compatible object storage) ───────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: aurora-minio
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:-minioadmin}
+      # Presigned PUT uploads go straight from the browser to MinIO, so the
+      # bucket must accept cross-origin requests from the web app.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:4173}
+    ports:
+      - '9000:9000' # S3 API
+      - '9001:9001' # web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # One-shot: creates the bucket and makes the public prefix anonymously
+  # readable so product images have stable, cacheable, CDN-friendly URLs.
+  minio-init:
+    image: minio/mc:latest
+    container_name: aurora-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: 'no'
+    environment:
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-minioadmin}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-minioadmin}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-ecom-media}
+    volumes:
+      - ./docker/minio/bootstrap.sh:/bootstrap.sh:ro
+    entrypoint: ['/bin/sh', '/bootstrap.sh']
+
+  # ── Redis (cache + rate-limit store; the app degrades to in-memory if absent)
+  redis:
+    image: redis:8-alpine
+    container_name: aurora-redis
+    restart: unless-stopped
+    command:
+      [
+        'redis-server',
+        '--appendonly',
+        'yes',
+        '--maxmemory',
+        '256mb',
+        '--maxmemory-policy',
+        'allkeys-lru',
+      ]
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # ── Mailpit (catches every outbound dev email; UI on :8025) ────────────────
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: aurora-mailpit
+    restart: unless-stopped
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # web UI
+    volumes:
+      - mailpit-data:/data
+
+  # ── mongo-express (collection browser; UI on :8081) ────────────────────────
+  mongo-express:
+    image: mongo-express:latest
+    container_name: aurora-mongo-express
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongo:27017/?directConnection=true
+      ME_CONFIG_BASICAUTH: 'false'
+      ME_CONFIG_MONGODB_ENABLE_ADMIN: 'true'
+    ports:
+      - '8081:8081'
+
+volumes:
+  mongo-data:
+  mongo-config:
+  minio-data:
+  redis-data:
+  mailpit-data:

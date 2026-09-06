@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // DOM is here only for the WHATWG globals this package uses (URLSearchParams),
+    // which exist in both Node and the browser. No DOM API is actually touched —
+    // this package must stay runtime-agnostic since the backend and the frontend
+    // both import it.
+    "lib": ["ES2023", "DOM"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "noEmit": false
+  },
+  "include": ["src/**/*.ts"]
+}

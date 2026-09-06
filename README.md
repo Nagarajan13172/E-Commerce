@@ -1,0 +1,292 @@
+# Aurora — Full-Stack MERN E-Commerce Platform
+
+A production-grade e-commerce platform: customer storefront + admin dashboard, built on
+MongoDB, Express 5, React 19 and Node 24, with Docker-based object storage.
+
+This is not a CRUD demo. The design is driven by four rules that shape almost every
+decision in the codebase:
+
+1. **Never trust the client** — prices, inventory and authorization are all recomputed
+   and enforced server-side.
+2. **Never oversell** — stock is reserved atomically inside MongoDB transactions.
+3. **Never double-charge or double-fulfil** — client retries and provider webhooks are
+   both idempotent.
+4. **Keep every external dependency behind an interface** — payments, storage, cache,
+   email and search can each be swapped without touching business logic.
+
+---
+
+## Status
+
+| Phase | Scope                                                               | State       |
+| ----- | ------------------------------------------------------------------- | ----------- |
+| 1     | Project structure, Docker infra, TS/lint/test toolchain, app shells | ✅ Complete |
+| 2     | Models, auth, RBAC, storage/email integrations                      | ⏳ Next     |
+| 3     | Categories, brands, products, variants, search, seed data           | —           |
+| 4     | Storefront: home, listing, PDP, search, account                     | —           |
+| 5     | Cart, coupons, checkout                                             | —           |
+| 6     | Orders, payments, inventory, notifications                          | —           |
+| 7     | Admin panel and analytics                                           | —           |
+| 8     | Testing, security, performance and accessibility hardening          | —           |
+
+---
+
+## Technology
+
+**Backend** — Node 24, Express 5, MongoDB 8 (replica set), Mongoose 9, Zod 4, argon2,
+pino, AWS S3 SDK (against MinIO), ioredis, nodemailer, Vitest + Supertest.
+
+**Frontend** — React 19, Vite 8, TypeScript 6, React Router 8, TanStack Query 5,
+Tailwind CSS 4, shadcn/ui, lucide-react, React Hook Form, Zustand, axios.
+
+**Infrastructure** — Docker Compose: MongoDB, MinIO, Redis, Mailpit, mongo-express.
+
+### Why these versions
+
+TypeScript is pinned to **6.0.3** rather than the newer 7.x. TypeScript 7 is the native
+(Go) compiler port, and `typescript-eslint` still declares `typescript >=4.8.4 <6.1.0` —
+adopting 7 today would mean giving up typed linting. 6.0.3 is stable, current, and fully
+supported by the lint toolchain.
+
+---
+
+## Prerequisites
+
+- **Node.js ≥ 20.19** (developed on 24.11)
+- **pnpm ≥ 9** — `corepack enable && corepack prepare pnpm@9.15.4 --activate`
+- **Docker Desktop** (or any Docker engine with Compose v2)
+
+---
+
+## Quick start
+
+```bash
+git clone <repo> && cd E-Commerce
+cp .env.example .env          # defaults work as-is for local development
+pnpm install
+pnpm docker:up                # MongoDB, MinIO, Redis, Mailpit, mongo-express
+pnpm build:shared             # shared/ must be built once before first run
+pnpm dev                      # shared (watch) + backend :4000 + frontend :5173
+```
+
+Then open <http://localhost:5173>. The landing page calls the live
+`/health/ready` endpoint, so a green row means that service is genuinely reachable
+through the real request path (browser → CORS → Express → dependency).
+
+### Service map
+
+| Service       | URL                                         | Notes                            |
+| ------------- | ------------------------------------------- | -------------------------------- |
+| Frontend      | <http://localhost:5173>                     | Vite dev server                  |
+| Backend       | <http://localhost:4000/api/v1>              | Express                          |
+| Health        | <http://localhost:4000/api/v1/health/ready> | Per-dependency readiness         |
+| MinIO console | <http://localhost:9001>                     | `minioadmin` / `minioadmin`      |
+| Mailpit       | <http://localhost:8025>                     | Catches every outbound dev email |
+| mongo-express | <http://localhost:8081>                     | Browse collections               |
+| MongoDB       | `localhost:27017`                           | Single-node replica set `rs0`    |
+| Redis         | `localhost:6379`                            | Cache + rate-limit counters      |
+
+---
+
+## Docker
+
+```bash
+pnpm docker:up       # start everything
+pnpm docker:ps       # health status
+pnpm docker:logs     # follow all logs
+pnpm docker:down     # stop, keep data
+pnpm docker:reset    # stop AND wipe all volumes (full reset)
+```
+
+### Why MongoDB runs as a replica set
+
+`docker-compose.yml` starts mongod with `--replSet rs0` and a one-shot `mongo-init`
+container that calls `rs.initiate()`. **This is not optional.** Checkout reserves stock
+for every line item inside a transaction, and MongoDB transactions do not exist on a
+standalone `mongod`. The API verifies this at boot and refuses to start with an
+actionable message if it finds a standalone server.
+
+Clients connect with `?directConnection=true`, which bypasses topology discovery. That
+is what lets the _same_ connection-string shape work from the host (`localhost:27017`)
+and from sibling containers (`mongo:27017`), regardless of the hostname the replica set
+advertises internally.
+
+### Object storage layout
+
+The `ecom-media` bucket is namespaced by visibility:
+
+- `public/**` — anonymously readable. Product imagery gets stable, cacheable,
+  crawler-visible URLs.
+- `private/**` — no anonymous access. Invoices and return labels are served only via
+  short-lived presigned GET URLs.
+
+Uploads use **presigned PUT straight from the browser to MinIO**, so large images never
+stream through Node. The server then verifies the object's real magic bytes before
+recording it — a renamed `.exe` cannot masquerade as a PNG.
+
+---
+
+## Environment variables
+
+Every variable is parsed by Zod at boot (`backend/src/config/env.ts`) and the process
+**exits** on anything missing or malformed, so a misconfiguration fails at deploy time
+rather than at 3am during a checkout. See `.env.example` for the full annotated list.
+
+Secrets are generated with:
+
+```bash
+openssl rand -base64 48
+```
+
+Two guards are enforced for production specifically: `COOKIE_SECURE` must be `true`, and
+`PAYMENT_PROVIDER=mock` is rejected outright.
+
+---
+
+## Commands
+
+```bash
+pnpm dev              # shared (watch) + backend + frontend
+pnpm dev:backend      # backend only
+pnpm dev:frontend     # frontend only
+pnpm build:shared     # build shared/ (required before the first dev run)
+pnpm build            # build shared → backend → frontend
+pnpm typecheck        # tsc across every package
+pnpm lint             # ESLint across the workspace
+pnpm format           # Prettier write
+pnpm test             # Vitest across every package
+pnpm test:backend     # backend tests only
+pnpm test:frontend    # frontend tests only
+pnpm seed             # populate the database with demo data (Phase 3)
+```
+
+Package names map to folders: `@ecom/backend`, `@ecom/frontend`, `@ecom/shared`. Any of
+them can be targeted directly with `pnpm --filter @ecom/<name> <script>`.
+
+---
+
+## Architecture
+
+```
+E-Commerce/
+├── backend/            Express API
+│   ├── src/
+│   │   ├── config/         env (Zod-parsed), db, logger, redis
+│   │   ├── models/         Mongoose schemas + indexes
+│   │   ├── services/       ALL business logic lives here
+│   │   ├── controllers/    thin HTTP ↔ service translation
+│   │   ├── routes/v1/      public / account / admin / webhooks
+│   │   ├── middleware/     auth, rbac, validate, csrf, rateLimit, errorHandler
+│   │   ├── integrations/   payments · storage · email · cache (all behind interfaces)
+│   │   ├── events/ jobs/   domain events, background workers
+│   │   ├── utils/ seed/
+│   │   ├── app.ts          Express assembly
+│   │   └── server.ts       lifecycle + graceful shutdown
+│   └── tests/              unit · integration (in-memory replica set)
+│
+├── frontend/           React SPA
+│   ├── src/
+│   │   ├── components/     ui/ (shadcn primitives) + common/ (shared building blocks)
+│   │   ├── features/       auth, catalog, cart, checkout, orders, account, admin/
+│   │   ├── layouts/        Root, Store, Account, Admin, Auth
+│   │   ├── routes/         route tree + guards; /admin is lazy-loaded
+│   │   ├── lib/            apiClient, queryClient, format, utils
+│   │   ├── hooks/ store/ styles/
+│   │   └── main.tsx  App.tsx
+│   └── tests/
+│
+├── shared/             Zod schemas + types imported by BOTH sides
+├── docker/             MongoDB replica-set init, MinIO bucket bootstrap
+├── docker-compose.yml
+├── tsconfig.base.json  tsconfig.node.json  tsconfig.react.json
+└── package.json        pnpm workspace root
+```
+
+Layering in the backend is strict: `route → middleware → controller → service → model`.
+Controllers only translate HTTP to service calls; no business logic lives in a route
+handler, and no Mongoose query syntax appears above the service layer.
+
+### The shared folder earns its keep
+
+`shared/` holds each schema exactly once. The same `productQuerySchema` that
+validates an incoming request on the server also parses `useSearchParams()` in the
+browser. That is why a shared URL like
+
+```
+/products?category=footwear&brand=nike&minPrice=1000&sort=price_asc
+```
+
+is guaranteed to mean the same thing on both sides: there is no second, drifting copy of
+the parsing rules.
+
+### Authentication
+
+- **Access token** — JWT, 15 minutes, httpOnly cookie. Carries a `tokenVersion` claim, so
+  bumping it on the user record instantly invalidates every live session (used on
+  password change, role change and account suspension).
+- **Refresh token** — _opaque_ random value, stored SHA-256-hashed, rotated on every use
+  with **reuse detection**: presenting an already-rotated token revokes the entire token
+  family. Opaque rather than a JWT precisely because refresh tokens must be revocable.
+- **CSRF** — double-submit. Auth lives in cookies (so XSS cannot steal a token), which is
+  exactly the condition CSRF exploits; a JS-readable, HMAC-signed token echoed in
+  `X-CSRF-Token` closes it.
+
+### NoSQL injection: whitelisting, not sanitizing
+
+There is deliberately **no `express-mongo-sanitize`** in this stack. It mutates
+`req.query`, which is a getter in Express 5, and it is unmaintained for Express 5.
+
+Instead every input is parsed by a Zod schema. `z.object()` strips unknown keys and
+coerces what remains to typed primitives, so an operator payload such as
+`{"email": {"$ne": null}}` cannot survive parsing into a string — it never reaches a
+Mongoose query. Whitelisting is strictly stronger than blacklisting `$` and `.`.
+
+Parsed input lands on `req.validated`, never back on `req.query`, for the same Express 5
+getter reason.
+
+### Failure posture
+
+Not every dependency is equal, and the code says so explicitly:
+
+- **MongoDB is hard.** Boot fails without it; `/health/ready` returns 503.
+- **Storage and cache are soft.** They are reported in readiness but do not fail the
+  probe — a cold cache degrades performance, it should not take the storefront offline.
+- **Rate limiting fails open.** If Redis blips, briefly unthrottled traffic beats
+  returning 500 to every customer. Limiting is an abuse protection, not a correctness
+  mechanism.
+
+---
+
+## Testing
+
+```bash
+pnpm test:backend
+```
+
+Integration tests run against an in-memory **`MongoMemoryReplSet`**, not a standalone
+server — otherwise the transaction-based inventory logic, which is the single most
+important thing to test, could not be exercised at all.
+
+---
+
+## Troubleshooting
+
+**`MongoDB transactions unavailable: server is not a replica set`**
+The `mongo-init` container did not run. `pnpm docker:ps` should show it as `Exited (0)`.
+Re-run with `pnpm docker:reset`.
+
+**API exits at boot with "Invalid environment configuration"**
+Expected behaviour — the message lists exactly which variables are missing or malformed.
+Copy `.env.example` to `.env`.
+
+**`Blocked by CORS` in the API log**
+The browser origin is not in `CORS_ORIGINS`. Credentials are enabled, so a wildcard is
+not permitted; add the exact origin.
+
+**Uploads fail from the browser with a CORS error**
+MinIO's allowed origins come from `MINIO_API_CORS_ALLOW_ORIGIN`, which Compose reads
+from `CORS_ORIGINS`. Restart MinIO after changing it.
+
+**Port already in use**
+Ports needed: 4000, 5173, 27017, 6379, 9000, 9001, 1025, 8025, 8081.
+Check with `lsof -i :<port>`.

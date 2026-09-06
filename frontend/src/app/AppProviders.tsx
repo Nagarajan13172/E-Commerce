@@ -3,18 +3,22 @@ import { Provider } from 'react-redux';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { store } from '@/store';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { fetchCurrentUser, sessionExpired } from '@/store/slices/authSlice';
+import { sessionExpired } from '@/store/slices/authSlice';
 import { selectTheme } from '@/store/selectors';
 import { queryClient } from '@/lib/queryClient';
 import { setAuthFailureHandler } from '@/lib/apiClient';
+import { useCurrentUser } from '@/features/auth/api/queries';
 
 /**
- * Connects the axios refresh interceptor back to Redux.
+ * Restores the session and connects the API layer back to the store.
  *
- * When a refresh fails the API layer needs to clear the session, but it must not
- * import the store directly — that would create a cycle (store → slice → api →
- * store) and make the client untestable in isolation. Registering a callback
- * keeps the dependency pointing one way.
+ * `useCurrentUser` is a TanStack Query hook — it owns the request, its cache and
+ * its de-duplication — and commits the result into Redux, which is what the
+ * rest of the app reads. No reducer performs I/O.
+ *
+ * The failure handler is *registered* rather than imported by the API client,
+ * which would create a cycle (store → slice → api → store) and make the client
+ * untestable on its own.
  */
 function SessionBridge({ children }: { children: ReactNode }) {
   const dispatch = useAppDispatch();
@@ -28,11 +32,7 @@ function SessionBridge({ children }: { children: ReactNode }) {
     });
   }, [dispatch]);
 
-  // Restore the session once on boot. The cookie is httpOnly, so asking the
-  // server is the only way to know whether one exists.
-  useEffect(() => {
-    void dispatch(fetchCurrentUser());
-  }, [dispatch]);
+  useCurrentUser();
 
   return <>{children}</>;
 }

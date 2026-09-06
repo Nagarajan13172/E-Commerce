@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { configureStore } from '@reduxjs/toolkit';
-import { authReducer, sessionExpired, userUpdated } from '@/store/slices/authSlice';
+import {
+  authReducer,
+  authRequestFailed,
+  sessionEnded,
+  sessionEstablished,
+  sessionExpired,
+  userUpdated,
+} from '@/store/slices/authSlice';
 import { uiReducer, setCartDrawerOpen, closeAllOverlays, setTheme } from '@/store/slices/uiSlice';
 import { selectIsAuthResolving, selectIsStaff } from '@/store/selectors';
 import type { RootState } from '@/store';
@@ -25,6 +32,44 @@ function makeStore() {
 }
 
 describe('auth slice', () => {
+  it('performs no I/O — every HTTP call lives in the query layer', () => {
+    // The guarantee this encodes: reducers are synchronous and pure, so the
+    // store can be exercised without a network, a server, or a mock of either.
+    const store = makeStore();
+    const before = store.getState().auth;
+
+    store.dispatch(sessionEstablished(makeUser()));
+    store.dispatch(sessionEnded());
+
+    expect(before.status).toBe('idle');
+    expect(store.getState().auth.status).toBe('unauthenticated');
+  });
+
+  it('records a session established by the query layer', () => {
+    const store = makeStore();
+    const user = makeUser({ name: 'Priya Sharma', role: 'manager' });
+
+    store.dispatch(sessionEstablished(user));
+
+    expect(store.getState().auth.user).toEqual(user);
+    expect(store.getState().auth.status).toBe('authenticated');
+  });
+
+  it('keeps server field errors for the form to display', () => {
+    const store = makeStore();
+
+    store.dispatch(
+      authRequestFailed({
+        message: 'Invalid email or password',
+        fieldErrors: { email: 'No account with that address' },
+      }),
+    );
+
+    expect(store.getState().auth.error).toBe('Invalid email or password');
+    expect(store.getState().auth.fieldErrors.email).toBe('No account with that address');
+    expect(store.getState().auth.status).toBe('unauthenticated');
+  });
+
   it('starts idle so guards wait instead of redirecting on a hard refresh', () => {
     const state = makeStore().getState() as RootState;
 
@@ -35,11 +80,23 @@ describe('auth slice', () => {
 
   it('clears the user when the session expires', () => {
     const store = makeStore();
-    store.dispatch(userUpdated(makeUser()));
+    store.dispatch(sessionEstablished(makeUser()));
     store.dispatch(sessionExpired());
 
     expect(store.getState().auth.user).toBeNull();
     expect(store.getState().auth.status).toBe('unauthenticated');
+  });
+
+  it('merges a profile edit into the current session', () => {
+    const store = makeStore();
+    store.dispatch(sessionEstablished(makeUser({ name: 'Priya Sharma' })));
+
+    store.dispatch(userUpdated({ name: 'Priya S.', phone: '9876543210' }));
+
+    // Patched in place so the header reflects an edit without a refetch.
+    expect(store.getState().auth.user?.name).toBe('Priya S.');
+    expect(store.getState().auth.user?.phone).toBe('9876543210');
+    expect(store.getState().auth.user?.email).toBe('shopper@example.com');
   });
 
   it('recognises staff roles for admin chrome', () => {

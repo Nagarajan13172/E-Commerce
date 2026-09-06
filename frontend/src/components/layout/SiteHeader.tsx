@@ -15,8 +15,8 @@ import {
 import { SearchBar } from './SearchBar';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectAuthUser, selectIsStaff } from '@/store/selectors';
-import { logout } from '@/store/slices/authSlice';
 import { setCartDrawerOpen } from '@/store/slices/uiSlice';
+import { useLogout } from '@/features/auth/api/queries';
 import { useCart } from '@/features/cart/api/queries';
 import { useCategoryTree } from '@/features/catalog/api/queries';
 import { cn } from '@/lib/utils';
@@ -33,6 +33,7 @@ export function SiteHeader() {
   const dispatch = useAppDispatch();
   const user = useAppSelector(selectAuthUser);
   const isStaff = useAppSelector(selectIsStaff);
+  const logoutMutation = useLogout();
   const { data: cart } = useCart();
   const { data: categories } = useCategoryTree();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -154,7 +155,7 @@ export function SiteHeader() {
                     </>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => void dispatch(logout())}>
+                  <DropdownMenuItem onClick={() => logoutMutation.mutate()}>
                     <LogOut className="size-4" /> Sign out
                   </DropdownMenuItem>
                 </DropdownMenuContent>

@@ -10,15 +10,16 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Seo } from '@/components/common/Seo';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { clearAuthError, register as registerUser } from '@/store/slices/authSlice';
-import { selectAuthError, selectAuthFieldErrors, selectAuthStatus } from '@/store/selectors';
+import { clearAuthError } from '@/store/slices/authSlice';
+import { selectAuthError, selectAuthFieldErrors } from '@/store/selectors';
+import { useRegister } from './api/queries';
 
 export default function RegisterPage() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const status = useAppSelector(selectAuthStatus);
   const serverError = useAppSelector(selectAuthError);
   const fieldErrors = useAppSelector(selectAuthFieldErrors);
+  const registerMutation = useRegister();
 
   const {
     register,
@@ -46,12 +47,13 @@ export default function RegisterPage() {
     }
   }, [fieldErrors, setError]);
 
-  const onSubmit = handleSubmit(async (values) => {
-    const result = await dispatch(registerUser(values));
-    if (registerUser.fulfilled.match(result)) navigate('/account', { replace: true });
+  const onSubmit = handleSubmit((values) => {
+    registerMutation.mutate(values as never, {
+      onSuccess: () => navigate('/account', { replace: true }),
+    });
   });
 
-  const isBusy = isSubmitting || status === 'loading';
+  const isBusy = isSubmitting || registerMutation.isPending;
 
   return (
     <>

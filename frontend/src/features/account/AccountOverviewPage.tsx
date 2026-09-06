@@ -1,14 +1,13 @@
 import { Link } from 'react-router';
 import { AlertTriangle, Heart, MapPin, Package } from 'lucide-react';
-import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Seo } from '@/components/common/Seo';
 import { useAppSelector } from '@/store/hooks';
 import { selectAuthUser } from '@/store/selectors';
-import { apiPost } from '@/lib/apiClient';
 import { formatDate } from '@/lib/format';
+import { useResendVerification } from '@/features/auth/api/queries';
 
 const SHORTCUTS = [
   { to: '/account/orders', icon: Package, title: 'Orders', body: 'Track and review past orders' },
@@ -18,12 +17,9 @@ const SHORTCUTS = [
 
 export default function AccountOverviewPage() {
   const user = useAppSelector(selectAuthUser);
-  if (!user) return null;
+  const resendVerification = useResendVerification();
 
-  const resendVerification = async () => {
-    await apiPost('/auth/resend-verification', { email: user.email }).catch(() => undefined);
-    toast.success('Confirmation email sent. Check your inbox.');
-  };
+  if (!user) return null;
 
   return (
     <>
@@ -43,7 +39,13 @@ export default function AccountOverviewPage() {
           <AlertTriangle className="size-4" aria-hidden="true" />
           <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
             <span>Confirm your email address to secure your account.</span>
-            <Button type="button" size="sm" variant="outline" onClick={resendVerification}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={resendVerification.isPending}
+              onClick={() => resendVerification.mutate(user.email)}
+            >
               Resend link
             </Button>
           </AlertDescription>

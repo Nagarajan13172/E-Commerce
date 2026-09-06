@@ -10,8 +10,9 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Seo } from '@/components/common/Seo';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { clearAuthError, login } from '@/store/slices/authSlice';
-import { selectAuthError, selectAuthFieldErrors, selectAuthStatus } from '@/store/selectors';
+import { clearAuthError } from '@/store/slices/authSlice';
+import { selectAuthError, selectAuthFieldErrors } from '@/store/selectors';
+import { useLogin } from './api/queries';
 
 /**
  * Sign in.
@@ -24,9 +25,10 @@ export default function LoginPage() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const status = useAppSelector(selectAuthStatus);
   const serverError = useAppSelector(selectAuthError);
   const fieldErrors = useAppSelector(selectAuthFieldErrors);
+  // TanStack Query performs the request; the slice records the outcome.
+  const loginMutation = useLogin();
 
   const {
     register,
@@ -52,16 +54,17 @@ export default function LoginPage() {
     }
   }, [fieldErrors, setError]);
 
-  const onSubmit = handleSubmit(async (values) => {
-    const result = await dispatch(login(values));
-    if (login.fulfilled.match(result)) {
-      // Return the user to wherever the guard interrupted them.
-      const next = searchParams.get('next');
-      navigate(next ? decodeURIComponent(next) : '/account', { replace: true });
-    }
+  const onSubmit = handleSubmit((values) => {
+    loginMutation.mutate(values as never, {
+      onSuccess: () => {
+        // Return the user to wherever the guard interrupted them.
+        const next = searchParams.get('next');
+        navigate(next ? decodeURIComponent(next) : '/account', { replace: true });
+      },
+    });
   });
 
-  const isBusy = isSubmitting || status === 'loading';
+  const isBusy = isSubmitting || loginMutation.isPending;
 
   return (
     <>

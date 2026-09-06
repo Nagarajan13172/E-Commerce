@@ -3,9 +3,9 @@ import { Link, useSearchParams } from 'react-router';
 import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Seo } from '@/components/common/Seo';
+import { useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiPost } from '@/lib/apiClient';
-import { useAppDispatch } from '@/store/hooks';
-import { fetchCurrentUser } from '@/store/slices/authSlice';
+import { authKeys } from './api/queries';
 
 /**
  * Email confirmation landing page.
@@ -16,7 +16,7 @@ import { fetchCurrentUser } from '@/store/slices/authSlice';
  */
 export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
-  const dispatch = useAppDispatch();
+  const queryClient = useQueryClient();
   const token = searchParams.get('token');
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
   const [message, setMessage] = useState('');
@@ -34,8 +34,9 @@ export default function VerifyEmailPage() {
     apiPost('/auth/verify-email', { token })
       .then(() => {
         setStatus('success');
-        // Refresh the session so the header stops showing "unverified".
-        void dispatch(fetchCurrentUser());
+        // Refetch the session so the "unverified" banner disappears. The query
+        // owns the request; its result flows into the store as usual.
+        void queryClient.invalidateQueries({ queryKey: authKeys.currentUser() });
       })
       .catch((error: unknown) => {
         setStatus('error');
@@ -43,7 +44,7 @@ export default function VerifyEmailPage() {
           error instanceof ApiError ? error.message : 'We could not confirm your email address.',
         );
       });
-  }, [token, dispatch]);
+  }, [token, queryClient]);
 
   return (
     <>

@@ -10,9 +10,8 @@ import type { UserRole } from '@ecom/shared';
 /**
  * Every auth HTTP call lives here.
  *
- * The store never talks to the network — see `features/auth/api/queries.ts` for
- * the hooks that call these, and `store/slices/authSlice.ts` for the state they
- * produce.
+ * These are called only by the hooks in `./queries.ts`, which own the caching
+ * and de-duplication. Nothing else in the app issues an auth request.
  */
 export interface AuthUser {
   id: string;

@@ -2,37 +2,29 @@ import { useEffect, type ReactNode } from 'react';
 import { Provider } from 'react-redux';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { store } from '@/store';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { sessionExpired } from '@/store/slices/authSlice';
+import { useAppSelector } from '@/store/hooks';
 import { selectTheme } from '@/store/selectors';
 import { queryClient } from '@/lib/queryClient';
 import { setAuthFailureHandler } from '@/lib/apiClient';
-import { useCurrentUser } from '@/features/auth/api/queries';
+import { authKeys } from '@/features/auth/api/queries';
 
 /**
- * Restores the session and connects the API layer back to the store.
+ * Connects the API client's session-failure signal to the query cache.
  *
- * `useCurrentUser` is a TanStack Query hook — it owns the request, its cache and
- * its de-duplication — and commits the result into Redux, which is what the
- * rest of the app reads. No reducer performs I/O.
- *
- * The failure handler is *registered* rather than imported by the API client,
- * which would create a cycle (store → slice → api → store) and make the client
- * untestable on its own.
+ * When a token refresh fails, the cached session must be marked signed-out and
+ * everything fetched as that user discarded. This is registered as a callback
+ * rather than imported by the API client, which would create a cycle
+ * (client → cache → client) and make the client untestable on its own.
  */
 function SessionBridge({ children }: { children: ReactNode }) {
-  const dispatch = useAppDispatch();
-
   useEffect(() => {
     setAuthFailureHandler(() => {
-      dispatch(sessionExpired());
-      // Every cached query was fetched as the previous user; keeping them would
-      // leak one account's data into the next session on this device.
-      queryClient.clear();
+      // Signed-out first (so guards react immediately), then drop everything
+      // else — see the note in `useLogout` for why the order matters.
+      queryClient.setQueryData(authKeys.currentUser(), null);
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== 'auth' });
     });
-  }, [dispatch]);
-
-  useCurrentUser();
+  }, []);
 
   return <>{children}</>;
 }

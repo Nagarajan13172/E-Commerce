@@ -1,17 +1,18 @@
 import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router';
-import { useAppSelector } from '@/store/hooks';
-import { selectIsAuthResolving, selectIsAuthenticated, selectAuthUser } from '@/store/selectors';
+import { useAuth } from '@/features/auth/api/queries';
 import { PageLoader } from '@/components/common/PageLoader';
 
 /**
  * Route guards.
  *
- * These are a **user-experience** control, not a security control. Anyone can
- * bypass them with devtools or by calling the API directly — which is fine,
- * because the server authorizes every request independently. Their job is to
- * avoid showing a page that is going to fail, and to send people somewhere
- * useful instead.
+ * A **user-experience** control, not a security one. Anyone can bypass these
+ * with devtools or by calling the API directly — which is fine, because the
+ * server authorizes every request independently. Their job is to avoid
+ * rendering a page that is going to fail, and to send people somewhere useful.
+ *
+ * Session state comes from `useAuth()`, whose single source of truth is the
+ * query cache; there is no store copy that could disagree with it.
  */
 
 /**
@@ -22,8 +23,7 @@ import { PageLoader } from '@/components/common/PageLoader';
  * a perfectly valid session to the login screen on every page reload.
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const isResolving = useAppSelector(selectIsAuthResolving);
-  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const { isAuthenticated, isResolving } = useAuth();
   const location = useLocation();
 
   if (isResolving) return <PageLoader />;
@@ -39,8 +39,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
 /** Keeps signed-in users off the login and register pages. */
 export function RequireGuest({ children }: { children: ReactNode }) {
-  const isResolving = useAppSelector(selectIsAuthResolving);
-  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const { isAuthenticated, isResolving } = useAuth();
 
   if (isResolving) return <PageLoader />;
   if (isAuthenticated) return <Navigate to="/account" replace />;
@@ -54,8 +53,7 @@ export function RequireGuest({ children }: { children: ReactNode }) {
  * "this exists but you may not see it" is information they do not need.
  */
 export function RequireRole({ roles, children }: { roles: string[]; children: ReactNode }) {
-  const isResolving = useAppSelector(selectIsAuthResolving);
-  const user = useAppSelector(selectAuthUser);
+  const { user, isResolving } = useAuth();
   const location = useLocation();
 
   if (isResolving) return <PageLoader />;

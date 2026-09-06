@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { STALE_TIME } from '@/lib/queryClient';
-import { useAppSelector } from '@/store/hooks';
-import { selectIsAuthenticated } from '@/store/selectors';
+import { useAuth } from '@/features/auth/api/queries';
 import {
   addToWishlist,
   fetchWishlist,
@@ -18,7 +17,7 @@ export const wishlistKeys = {
 };
 
 export function useWishlist() {
-  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const { isAuthenticated } = useAuth();
 
   return useQuery({
     queryKey: wishlistKeys.items(),
@@ -37,7 +36,7 @@ export function useWishlist() {
  * costs one small id array rather than loading every saved product in full.
  */
 export function useWishlistIds() {
-  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const { isAuthenticated } = useAuth();
 
   const query = useQuery({
     queryKey: wishlistKeys.ids(),

@@ -4,10 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Seo } from '@/components/common/Seo';
-import { useAppSelector } from '@/store/hooks';
-import { selectAuthUser } from '@/store/selectors';
 import { formatDate } from '@/lib/format';
-import { useResendVerification } from '@/features/auth/api/queries';
+import { useAuth, useResendVerification } from '@/features/auth/api/queries';
 
 const SHORTCUTS = [
   { to: '/account/orders', icon: Package, title: 'Orders', body: 'Track and review past orders' },
@@ -16,7 +14,7 @@ const SHORTCUTS = [
 ];
 
 export default function AccountOverviewPage() {
-  const user = useAppSelector(selectAuthUser);
+  const { user } = useAuth();
   const resendVerification = useResendVerification();
 
   if (!user) return null;

@@ -24,3 +24,7 @@ test-results/
 .playwright/
 
 docker/data/
+
+# Stray output from local browser checks
+undefined/
+*.local.png

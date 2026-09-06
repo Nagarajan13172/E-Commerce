@@ -13,10 +13,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SearchBar } from './SearchBar';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { selectAuthUser, selectIsStaff } from '@/store/selectors';
+import { useAppDispatch } from '@/store/hooks';
 import { setCartDrawerOpen } from '@/store/slices/uiSlice';
-import { useLogout } from '@/features/auth/api/queries';
+import { useAuth, useLogout } from '@/features/auth/api/queries';
 import { useCart } from '@/features/cart/api/queries';
 import { useCategoryTree } from '@/features/catalog/api/queries';
 import { cn } from '@/lib/utils';
@@ -31,8 +30,7 @@ import { cn } from '@/lib/utils';
  */
 export function SiteHeader() {
   const dispatch = useAppDispatch();
-  const user = useAppSelector(selectAuthUser);
-  const isStaff = useAppSelector(selectIsStaff);
+  const { user, isStaff } = useAuth();
   const logoutMutation = useLogout();
   const { data: cart } = useCart();
   const { data: categories } = useCategoryTree();

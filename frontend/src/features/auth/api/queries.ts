@@ -1,32 +1,22 @@
-import { useEffect } from 'react';
+import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { LoginInput, RegisterInput } from '@ecom/shared';
+import type { LoginInput, RegisterInput, UserRole } from '@ecom/shared';
 import { ApiError } from '@/lib/apiClient';
-import { useAppDispatch } from '@/store/hooks';
-import {
-  authFailed,
-  authRequestFailed,
-  authRequestStarted,
-  sessionEstablished,
-  sessionEnded,
-} from '@/store/slices/authSlice';
 import * as authApi from './auth.api';
 import type { AuthUser } from './auth.api';
 
 /**
- * Auth data fetching.
+ * Auth data access.
  *
- * The division of responsibility, applied consistently across the app:
+ * The signed-in user is **server state** — it lives in the database and is
+ * fetched over HTTP — so TanStack Query owns it outright. It is deliberately
+ * NOT mirrored into Redux: a copy in the store would need an effect to keep it
+ * in step, and two sources of truth that can drift is precisely the problem
+ * this architecture exists to avoid.
  *
- *   TanStack Query  — every HTTP call, plus its caching, deduplication,
- *                     retry policy and in-flight state.
- *   Redux Toolkit   — the resulting application state, which components and
- *                     route guards read from.
- *
- * These hooks are the seam. They call the API layer and commit the outcome to
- * the store, so no reducer ever performs I/O and no component has to know
- * whether the session came from cache or the network.
+ * Redux owns client state (see `store/slices/uiSlice.ts`), which is a different
+ * kind of thing and needs no synchronisation with anything.
  */
 
 export const authKeys = {
@@ -34,107 +24,123 @@ export const authKeys = {
   currentUser: () => [...authKeys.all, 'me'] as const,
 };
 
-/**
- * Restore the session on boot.
- *
- * The access token is an httpOnly cookie the app cannot read, so the only way
- * to learn whether a session exists is to ask. A 401 is a normal answer here —
- * it means "signed out", not "something failed" — so it resolves to null rather
- * than throwing.
- */
-export function useCurrentUser() {
-  const dispatch = useAppDispatch();
+const STAFF_ROLES: readonly UserRole[] = ['support', 'manager', 'admin'];
 
+export interface AuthContext {
+  user: AuthUser | null;
+  isAuthenticated: boolean;
+  /**
+   * True until the first `/auth/me` settles.
+   *
+   * Route guards must wait on this rather than treating "not yet known" as
+   * "signed out" — otherwise a hard refresh bounces a perfectly valid session
+   * to the login page.
+   */
+  isResolving: boolean;
+  isStaff: boolean;
+  hasPermission: (permission: string) => boolean;
+}
+
+/**
+ * The session.
+ *
+ * Every component that needs the current user calls this. TanStack Query
+ * de-duplicates by key, so N callers share one request and one cache entry —
+ * which is what makes a single source of truth practical without prop drilling
+ * or a store mirror.
+ */
+export function useAuth(): AuthContext {
   const query = useQuery({
     queryKey: authKeys.currentUser(),
     queryFn: async (): Promise<AuthUser | null> => {
       try {
         return await authApi.fetchCurrentUser();
       } catch (error) {
+        // A 401 is the answer "signed out", not a failure worth retrying or
+        // surfacing. Anything else is a real error.
         if (error instanceof ApiError && error.status === 401) return null;
         throw error;
       }
     },
-    // The session is the one thing that must never be served stale — a signed
-    // out user seeing their old name in the header is alarming.
+    // The session must never be served stale: a signed-out user still seeing
+    // their name in the header is alarming, and a stale role is a security smell.
     staleTime: 0,
     retry: false,
   });
 
-  // Commit the query outcome to the store, which is what the rest of the app
-  // reads. Kept in an effect so the reducer stays synchronous and pure.
-  useEffect(() => {
-    if (query.isPending) return;
-    if (query.isError) {
-      dispatch(authFailed());
-      return;
-    }
-    dispatch(query.data ? sessionEstablished(query.data) : sessionEnded());
-  }, [query.isPending, query.isError, query.data, dispatch]);
+  const user = query.data ?? null;
 
-  return query;
+  return useMemo(
+    () => ({
+      user,
+      isAuthenticated: user !== null,
+      isResolving: query.isPending,
+      isStaff: user ? STAFF_ROLES.includes(user.role) : false,
+      // Presentation only — hiding a control the user cannot use. The server
+      // re-checks every request, so a tampered cache reveals a button, not an
+      // ability.
+      hasPermission: (permission: string) => user?.permissions.includes(permission) ?? false,
+    }),
+    [user, query.isPending],
+  );
 }
 
-function useAuthMutation(mutationFn: (input: never) => Promise<AuthUser>, fallbackMessage: string) {
-  const dispatch = useAppDispatch();
+/** Shared success handling for sign-in and registration. */
+function useEstablishSession() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn,
-    onMutate: () => {
-      dispatch(authRequestStarted());
-    },
-    onSuccess: (user: AuthUser) => {
-      // Seed the cache so a later `useCurrentUser` does not refetch what we
-      // already know, then publish to the store.
-      queryClient.setQueryData(authKeys.currentUser(), user);
-      dispatch(sessionEstablished(user));
-      // The guest bag was merged server-side during sign-in, so the cached
-      // anonymous cart is now wrong.
-      void queryClient.invalidateQueries({ queryKey: ['cart'] });
-      void queryClient.invalidateQueries({ queryKey: ['wishlist'] });
-    },
-    onError: (error: unknown) => {
-      const isApiError = error instanceof ApiError;
-      dispatch(
-        authRequestFailed({
-          message: isApiError ? error.message : fallbackMessage,
-          fieldErrors: isApiError ? error.fieldErrorMap : {},
-        }),
-      );
-    },
-  });
+  return (user: AuthUser) => {
+    // Seed the cache directly so no refetch is needed for what we just learned.
+    queryClient.setQueryData(authKeys.currentUser(), user);
+    // The guest bag was merged server-side during sign-in, so the cached
+    // anonymous cart and wishlist are now wrong.
+    void queryClient.invalidateQueries({ queryKey: ['cart'] });
+    void queryClient.invalidateQueries({ queryKey: ['wishlist'] });
+  };
 }
 
 export function useLogin() {
-  return useAuthMutation(
-    (credentials: never) => authApi.login(credentials as unknown as LoginInput),
-    'Unable to sign in. Please try again.',
-  );
+  const establishSession = useEstablishSession();
+
+  return useMutation({
+    mutationFn: (credentials: LoginInput) => authApi.login(credentials),
+    onSuccess: establishSession,
+  });
 }
 
 export function useRegister() {
-  return useAuthMutation(
-    (input: never) => authApi.register(input as unknown as RegisterInput),
-    'Unable to create your account.',
-  );
+  const establishSession = useEstablishSession();
+
+  return useMutation({
+    mutationFn: (input: RegisterInput) => authApi.register(input),
+    onSuccess: establishSession,
+  });
 }
 
 export function useLogout() {
-  const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: authApi.logout,
     onSuccess: () => {
-      dispatch(sessionEnded());
-      // Every cached query was fetched as the previous user. Keeping any of it
+      // Order matters. Mark the session signed-out FIRST, so every mounted
+      // `useAuth` observer sees `null` synchronously and route guards react on
+      // the same tick. Calling `clear()` first would drop the auth query too,
+      // leaving its observers holding the previous user until a refetch landed
+      // — which is long enough to leave someone sitting on a page they are no
+      // longer allowed to see.
+      queryClient.setQueryData(authKeys.currentUser(), null);
+
+      // Then discard everything fetched as the previous user; keeping any of it
       // would leak one account's data into the next session on this device.
-      queryClient.clear();
+      queryClient.removeQueries({
+        predicate: (query) => query.queryKey[0] !== 'auth',
+      });
+
       toast.success('Signed out');
       // Deliberately no redirect. Signing out on a public page should leave the
-      // customer where they were; a page that genuinely requires auth is sent to
-      // /login by its route guard, which also records where to return to.
+      // customer where they were; a page that genuinely requires auth is sent
+      // to /login by its route guard, which records where to return to.
     },
   });
 }
@@ -144,4 +150,19 @@ export function useResendVerification() {
     mutationFn: authApi.resendVerification,
     onSuccess: () => toast.success('Confirmation email sent. Check your inbox.'),
   });
+}
+
+/**
+ * Field-level errors from a failed auth request.
+ *
+ * Read straight off the mutation rather than stored anywhere: form feedback is
+ * transient and belongs to the form, not to global application state.
+ */
+export function authFieldErrors(error: unknown): Record<string, string> {
+  return error instanceof ApiError ? error.fieldErrorMap : {};
+}
+
+export function authErrorMessage(error: unknown, fallback: string): string | null {
+  if (!error) return null;
+  return error instanceof ApiError ? error.message : fallback;
 }

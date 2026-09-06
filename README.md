@@ -221,86 +221,47 @@ the parsing rules.
 
 ### State management
 
-Two layers, split by who owns the data:
+**Redux Toolkit + TanStack Query**, split by _who owns the data_ — not by feature.
 
-- **Redux Toolkit** owns _client_ state — the session (`authSlice`) and interface
-  state such as open drawers and theme (`uiSlice`). Access it through the typed
-  `useAppDispatch` / `useAppSelector` hooks in `frontend/src/store/hooks.ts`, never the
-  bare react-redux ones.
-- **TanStack Query** owns _server_ state — products, cart, orders. This data is not
-  mirrored into Redux: doing so would mean hand-rolling caching, deduplication and
-  invalidation, and keeping a second copy of the truth that can silently disagree with
-  the database.
+| Kind of state                                               | Owner              | Examples                                                            |
+| ----------------------------------------------------------- | ------------------ | ------------------------------------------------------------------- |
+| **Server state** — lives in the database, arrives over HTTP | **TanStack Query** | products, cart, orders, wishlist, addresses, **the signed-in user** |
+| **Client state** — the server has no opinion about it       | **Redux Toolkit**  | open drawers and sheets, theme, admin sidebar                       |
 
-Tokens are never in the store. They live in httpOnly cookies the app cannot read, so
-"am I signed in?" is answered by asking the server (`/auth/me`), not by inspecting a
-token. `AppProviders` wires the axios refresh interceptor back to Redux through a
-registered callback rather than a direct import, keeping the dependency one-directional.
-
-### Authentication
-
-- **Access token** — JWT, 15 minutes, httpOnly cookie. Carries a `tokenVersion` claim, so
-  bumping it on the user record instantly invalidates every live session (used on
-  password change, role change and account suspension).
-- **Refresh token** — _opaque_ random value, stored SHA-256-hashed, rotated on every use
-  with **reuse detection**: presenting an already-rotated token revokes the entire token
-  family. Opaque rather than a JWT precisely because refresh tokens must be revocable.
-- **CSRF** — double-submit. Auth lives in cookies (so XSS cannot steal a token), which is
-  exactly the condition CSRF exploits; a JS-readable, HMAC-signed token echoed in
-  `X-CSRF-Token` closes it.
-
-### NoSQL injection: whitelisting, not sanitizing
-
-There is deliberately **no `express-mongo-sanitize`** in this stack. It mutates
-`req.query`, which is a getter in Express 5, and it is unmaintained for Express 5.
-
-Instead every input is parsed by a Zod schema. `z.object()` strips unknown keys and
-coerces what remains to typed primitives, so an operator payload such as
-`{"email": {"$ne": null}}` cannot survive parsing into a string — it never reaches a
-Mongoose query. Whitelisting is strictly stronger than blacklisting `$` and `.`.
-
-Parsed input lands on `req.validated`, never back on `req.query`, for the same Express 5
-getter reason.
-
-### Failure posture
-
-Not every dependency is equal, and the code says so explicitly:
-
-- **MongoDB is hard.** Boot fails without it; `/health/ready` returns 503.
-- **Storage and cache are soft.** They are reported in readiness but do not fail the
-  probe — a cold cache degrades performance, it should not take the storefront offline.
-- **Rate limiting fails open.** If Redis blips, briefly unthrottled traffic beats
-  returning 500 to every customer. Limiting is an abuse protection, not a correctness
-  mechanism.
-
----
-
-## Seed data
+Two rules follow from that, and both are checkable:
 
 ```bash
-pnpm seed            # populate an empty database
-pnpm seed --fresh    # wipe and repopulate
+# 1. No reducer performs I/O.
+grep -rn "apiGet\|apiPost\|createAsyncThunk" frontend/src/store/   # → nothing
+
+# 2. No fetched entity is mirrored into the store.
+grep -n "reducer:" -A4 frontend/src/store/index.ts                  # → { ui } only
 ```
 
-Produces 27 categories nested three levels deep, 10 brands, 20 products with 79
-variants, 71 reviews and 4 coupons.
+The second rule is the one that is easy to get wrong. The signed-in user _feels_ like
+application state, so the obvious move is to fetch it with a query and copy it into a
+slice. That copy then needs an effect to stay in step, and you have two sources of truth
+that can disagree — exactly what this architecture exists to prevent. So the session is
+read through `useAuth()`, whose only source is the query cache. TanStack Query
+de-duplicates by key, so the header, a route guard and a page all calling `useAuth()`
+share one request and one cache entry.
 
-The catalog is deliberately _uneven_: some variants are out of stock, twelve products
-sit below their low-stock threshold, one product is entirely sold out, and prices span
-₹749 to ₹1,64,999. A uniform catalog would let the availability filter, the low-stock
-report and the price facet all ship broken while looking fine.
+Transient form feedback (a failed sign-in message, server-side field errors) is read
+straight off the mutation. It belongs to the form, not to global state.
 
-**Development sign-ins** (password `Password123` for all):
+Always use the typed `useAppDispatch` / `useAppSelector` from
+`frontend/src/store/hooks.ts`; the bare react-redux versions type state as `unknown`.
 
-| Email                  | Role     | Notes                                      |
-| ---------------------- | -------- | ------------------------------------------ |
-| `admin@aurora.local`   | admin    | All 22 permissions                         |
-| `manager@aurora.local` | manager  | Catalog and orders, but cannot grant roles |
-| `support@aurora.local` | support  | Read-only; cannot refund or change prices  |
-| `priya@example.com`    | customer | Has a saved address                        |
-| `neha@example.com`     | customer | Email deliberately unverified              |
+Tokens are never in either layer. They live in httpOnly cookies the app cannot read —
+which is what makes them safe from XSS — so "am I signed in?" is answered by asking the
+server, not by inspecting client state.
 
----
+### Why not RTK Query
+
+RTK Query is a fine library, but it is an API cache — the same job TanStack Query does
+here. Running both would mean two caches able to disagree about the same resource, and
+two invalidation systems to keep in step. The data layer is TanStack Query throughout,
+and Redux Toolkit does what it is best at: predictable, inspectable client state.
 
 ## Storefront
 

@@ -9,10 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Seo } from '@/components/common/Seo';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { clearAuthError } from '@/store/slices/authSlice';
-import { selectAuthError, selectAuthFieldErrors } from '@/store/selectors';
-import { useLogin } from './api/queries';
+import { authErrorMessage, authFieldErrors, useLogin } from './api/queries';
 
 /**
  * Sign in.
@@ -22,13 +19,13 @@ import { useLogin } from './api/queries';
  * the server will reject.
  */
 export default function LoginPage() {
-  const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const serverError = useAppSelector(selectAuthError);
-  const fieldErrors = useAppSelector(selectAuthFieldErrors);
-  // TanStack Query performs the request; the slice records the outcome.
+  // Form feedback is transient and belongs to the form, so it is read straight
+  // off the mutation rather than stored in Redux.
   const loginMutation = useLogin();
+  const serverError = authErrorMessage(loginMutation.error, 'Unable to sign in. Please try again.');
+  const fieldErrors = authFieldErrors(loginMutation.error);
 
   const {
     register,
@@ -42,11 +39,6 @@ export default function LoginPage() {
     defaultValues: { email: '', password: '', rememberMe: false },
   });
 
-  // Clear any stale error from a previous visit to this page.
-  useEffect(() => {
-    dispatch(clearAuthError());
-  }, [dispatch]);
-
   // Surface server-side field errors on the matching inputs.
   useEffect(() => {
     for (const [field, message] of Object.entries(fieldErrors)) {
@@ -55,7 +47,7 @@ export default function LoginPage() {
   }, [fieldErrors, setError]);
 
   const onSubmit = handleSubmit((values) => {
-    loginMutation.mutate(values as never, {
+    loginMutation.mutate(values, {
       onSuccess: () => {
         // Return the user to wherever the guard interrupted them.
         const next = searchParams.get('next');

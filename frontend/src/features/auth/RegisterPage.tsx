@@ -9,17 +9,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Seo } from '@/components/common/Seo';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { clearAuthError } from '@/store/slices/authSlice';
-import { selectAuthError, selectAuthFieldErrors } from '@/store/selectors';
-import { useRegister } from './api/queries';
+import { authErrorMessage, authFieldErrors, useRegister } from './api/queries';
 
 export default function RegisterPage() {
-  const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const serverError = useAppSelector(selectAuthError);
-  const fieldErrors = useAppSelector(selectAuthFieldErrors);
   const registerMutation = useRegister();
+  const serverError = authErrorMessage(registerMutation.error, 'Unable to create your account.');
+  const fieldErrors = authFieldErrors(registerMutation.error);
 
   const {
     register,
@@ -38,17 +34,13 @@ export default function RegisterPage() {
   });
 
   useEffect(() => {
-    dispatch(clearAuthError());
-  }, [dispatch]);
-
-  useEffect(() => {
     for (const [field, message] of Object.entries(fieldErrors)) {
       setError(field as keyof RegisterFormValues, { message });
     }
   }, [fieldErrors, setError]);
 
   const onSubmit = handleSubmit((values) => {
-    registerMutation.mutate(values as never, {
+    registerMutation.mutate(values, {
       onSuccess: () => navigate('/account', { replace: true }),
     });
   });

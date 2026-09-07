@@ -402,6 +402,27 @@ incoming variants array straight onto the document, so Mongoose refilled `reserv
 holding, and they can then be sold twice. Variants are now merged by `_id`, with those
 two fields taken from the stored document and never from the request.
 
+### Categories, brands and media
+
+The category editor is a tree with explicit move controls rather than pointer
+dragging — a drag gesture with no keyboard equivalent would make the ordering of the
+storefront navigation editable only by people who can use a mouse, and reordering is the
+entire point of the screen. Each move sends the whole sibling list, because a position
+only means anything relative to its siblings.
+
+Adding a subcategory expands the parent first. Creating a row inside a collapsed branch
+otherwise looks like nothing happened.
+
+The media library shares its uploader with the product form, so presign, direct-to-storage
+PUT and magic-byte confirm behave identically in both. Deleting media is one of the few
+genuinely destructive actions here — the object and its derivatives leave storage, unlike
+almost everything else, which is soft-deleted — so the confirmation says so.
+
+Payments are deliberately read-only. A refund has to check what remains refundable, move
+the order through its state machine and write a timeline entry, so it belongs on the
+order screen; a refund button here would be a second path into that logic and the one
+most likely to skip a step.
+
 ### Guards that mirror the server
 
 Where the server refuses something, the UI hides the control rather than letting an
@@ -461,7 +482,7 @@ than waiting on three resizes.
 ```bash
 pnpm test           # backend + frontend unit and integration suites
 pnpm test:backend   # 331 tests: services, routes, authorization, security, indexes
-pnpm test:e2e       # 31 Playwright tests: journeys, accessibility, responsiveness
+pnpm test:e2e       # 39 Playwright tests: journeys, accessibility, responsiveness
 ```
 
 `pnpm test` is safe to run anywhere: it uses an in-memory database and needs no

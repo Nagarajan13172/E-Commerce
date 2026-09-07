@@ -50,7 +50,7 @@ export default defineConfig({
     },
     {
       name: 'admin',
-      testMatch: /(admin|product-editor)\.spec\.ts/,
+      testMatch: /(admin|product-editor|taxonomy)\.spec\.ts/,
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'], storageState: STATE_FILES.admin },
     },

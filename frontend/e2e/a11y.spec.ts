@@ -23,26 +23,38 @@ const ADMIN = [
   '/admin/products',
   '/admin/products/new',
   '/admin/inventory',
+  '/admin/categories',
+  '/admin/brands',
+  '/admin/media',
+  '/admin/payments',
   '/admin/customers',
   '/admin/reviews',
   '/admin/coupons',
 ];
 
 /**
- * Wait for any toast to finish animating.
+ * Wait for anything that fades in to finish fading.
  *
- * Sonner fades a toast in, and axe scanning mid-transition sees near-white text
- * on near-white — a 1.01 contrast ratio that no user ever experiences. Scanning
- * the toast once it has settled is the honest check: it still gets audited, at
- * the opacity it is actually read at.
+ * Toasts and dialogs both animate their opacity, and axe measures the composite
+ * at whatever opacity it happens to catch. A toast mid-fade reported near-white
+ * on near-white — 1.01:1. A dialog mid-fade let the overlay show through its own
+ * card, so the same description measured 4.3:1 on one run, 4.21:1 on the next
+ * and passed on a third, as the "background colour" drifted between #fdfdfc,
+ * #ededec and #e6e6e5.
+ *
+ * None of those are states a person reads text in. Waiting for opacity to reach
+ * 1 audits them where they are actually read, and — just as importantly — makes
+ * the result deterministic, so a genuine regression is not lost among noise.
  */
-async function settleToasts(page: import('@playwright/test').Page) {
+async function settleAnimations(page: import('@playwright/test').Page) {
   await page
     .waitForFunction(
       () =>
-        [...document.querySelectorAll('[data-sonner-toast]')].every(
-          (el) => Number(getComputedStyle(el).opacity) === 1,
-        ),
+        [
+          ...document.querySelectorAll(
+            '[data-sonner-toast], [role="dialog"], [data-slot="dialog-overlay"]',
+          ),
+        ].every((el) => Number(getComputedStyle(el).opacity) === 1),
       undefined,
       { timeout: 5_000 },
     )
@@ -50,11 +62,12 @@ async function settleToasts(page: import('@playwright/test').Page) {
 }
 
 async function scan(page: import('@playwright/test').Page) {
-  await settleToasts(page);
+  await settleAnimations(page);
   const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
   return results.violations.map(
     (v) =>
-      `${v.id} (${v.impact}, ${v.nodes.length} node(s)): ${v.nodes[0]?.failureSummary?.split('\n')[1]?.trim() ?? v.help}`,
+      `${v.id} (${v.impact}, ${v.nodes.length} node(s)): ${v.nodes[0]?.failureSummary?.split('\n')[1]?.trim() ?? v.help}` +
+      ` :: ${v.nodes[0]?.target.join(' ')} :: ${(v.nodes[0]?.html ?? '').slice(0, 200)}`,
   );
 }
 
@@ -126,6 +139,39 @@ test.describe('product form', () => {
       await expect(page.locator('tbody tr')).toHaveCount(1);
       expect(await scan(page), 'violations with variants generated').toEqual([]);
 
+      await context.close();
+    });
+  }
+});
+
+/**
+ * Dialogs, which the page sweeps never see.
+ *
+ * A dialog is not in the DOM until it is opened, so scanning the page it lives
+ * on says nothing about it — and dialogs here are forms, which is precisely
+ * where labelling and contrast go wrong.
+ */
+test.describe('dialogs', () => {
+  for (const [path, open, label] of [
+    ['/admin/categories', 'New category', 'category'],
+    ['/admin/brands', 'New brand', 'brand'],
+    ['/admin/coupons', 'New coupon', 'coupon'],
+  ] as const) {
+    test(`the ${label} dialog is clean`, async ({ browser }) => {
+      const context = await browser.newContext({ storageState: STATE_FILES.admin });
+      const page = await context.newPage();
+      await page.goto(path);
+      // Let the page behind finish loading first. Opening the dialog over a
+      // still-loading page put animating skeletons under muted text, and axe
+      // measured that transient pairing at 4.3:1 — a state no user sees, and
+      // not what this test is about.
+      await pageReady(page);
+      await expect(page.locator('.animate-pulse')).toHaveCount(0);
+
+      await page.getByRole('button', { name: open }).click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+
+      expect(await scan(page), `violations in the ${label} dialog`).toEqual([]);
       await context.close();
     });
   }

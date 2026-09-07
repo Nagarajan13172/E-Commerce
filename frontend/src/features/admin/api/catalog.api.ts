@@ -1,8 +1,12 @@
 import { apiDelete, apiGet, apiGetWithMeta, apiPatch, apiPost } from '@/lib/apiClient';
 import type {
   ConfirmUploadInput,
+  CreateBrandInput,
+  CreateCategoryInput,
   CreateProductInput,
   PresignUploadInput,
+  UpdateBrandInput,
+  UpdateCategoryInput,
   UpdateProductInput,
 } from '@ecom/shared';
 import type { PaginationMeta } from '@/types/catalog';
@@ -75,24 +79,112 @@ export async function duplicateProduct(id: string) {
 
 // ── Taxonomy, for the pickers ───────────────────────────────────────────────
 
-export interface AdminCategoryOption {
+export interface AdminCategory {
   _id: string;
   name: string;
+  slug: string;
+  description?: string;
+  image?: string;
+  parent?: string | null;
+  ancestors: string[];
   path: string;
   level: number;
+  order: number;
+  status: 'active' | 'inactive';
+  isFeatured: boolean;
+  productCount: number;
+  children: AdminCategory[];
+}
+
+/** The API returns roots with nested `children`. */
+export async function fetchCategoryTree() {
+  return apiGet<{ items: AdminCategory[] }>('/admin/categories');
+}
+
+/**
+ * The tree flattened depth-first, for the pickers.
+ *
+ * The endpoint returns a nested tree, so a component that iterated the response
+ * directly would offer only the top-level categories — which is exactly what
+ * the product form's category select was doing.
+ */
+export function flattenCategories(nodes: AdminCategory[]): AdminCategory[] {
+  return nodes.flatMap((node) => [node, ...flattenCategories(node.children ?? [])]);
 }
 
 export async function fetchAdminCategories() {
-  return apiGet<{ categories: AdminCategoryOption[] }>('/admin/categories');
+  const { items } = await fetchCategoryTree();
+  return { categories: flattenCategories(items) };
 }
 
-export interface AdminBrandOption {
+export async function createCategory(input: CreateCategoryInput) {
+  return apiPost<{ category: AdminCategory }>('/admin/categories', input);
+}
+
+export async function updateCategory(id: string, input: UpdateCategoryInput) {
+  return apiPatch<{ category: AdminCategory }>(`/admin/categories/${id}`, input);
+}
+
+export async function deleteCategory(id: string) {
+  return apiDelete<void>(`/admin/categories/${id}`);
+}
+
+export async function reorderCategories(items: { id: string; order: number }[]) {
+  return apiPost<{ updated: number }>('/admin/categories/reorder', { items });
+}
+
+// ── Brands ──────────────────────────────────────────────────────────────────
+
+export interface AdminBrand {
   _id: string;
   name: string;
+  slug: string;
+  description?: string;
+  logo?: string;
+  website?: string;
+  status: 'active' | 'inactive';
+  isFeatured: boolean;
+  productCount: number;
+  createdAt: string;
 }
 
+/** Returns every brand; the endpoint is not paginated. */
 export async function fetchAdminBrands() {
-  return apiGetWithMeta<{ items: AdminBrandOption[] }, PaginationMeta>('/admin/brands?limit=100');
+  return apiGet<{ items: AdminBrand[] }>('/admin/brands');
+}
+
+export async function createBrand(input: CreateBrandInput) {
+  return apiPost<{ brand: AdminBrand }>('/admin/brands', input);
+}
+
+export async function updateBrand(id: string, input: UpdateBrandInput) {
+  return apiPatch<{ brand: AdminBrand }>(`/admin/brands/${id}`, input);
+}
+
+export async function deleteBrand(id: string) {
+  return apiDelete<void>(`/admin/brands/${id}`);
+}
+
+// ── Payments ────────────────────────────────────────────────────────────────
+
+export interface AdminPayment {
+  _id: string;
+  order?: { _id: string; orderNumber: string; status: string } | null;
+  user?: { _id: string; name: string; email: string } | null;
+  provider: string;
+  providerOrderId: string;
+  providerPaymentId?: string;
+  amount: number;
+  amountRefunded: number;
+  currency: string;
+  status: string;
+  method?: string;
+  failureReason?: string;
+  createdAt: string;
+}
+
+export async function fetchPayments(page = 1) {
+  return apiGetWithMeta<{ items: AdminPayment[] }, PaginationMeta>(`/admin/payments?page=${page}`);
 }
 
 // ── Media ───────────────────────────────────────────────────────────────────

@@ -43,6 +43,10 @@ const AdminOrdersPage = lazy(() => import('@/features/admin/pages/AdminOrdersPag
 const AdminOrderDetailPage = lazy(() => import('@/features/admin/pages/AdminOrderDetailPage'));
 const AdminProductsPage = lazy(() => import('@/features/admin/pages/AdminProductsPage'));
 const AdminProductFormPage = lazy(() => import('@/features/admin/pages/AdminProductFormPage'));
+const AdminCategoriesPage = lazy(() => import('@/features/admin/pages/AdminCategoriesPage'));
+const AdminBrandsPage = lazy(() => import('@/features/admin/pages/AdminBrandsPage'));
+const AdminMediaPage = lazy(() => import('@/features/admin/pages/AdminMediaPage'));
+const AdminPaymentsPage = lazy(() => import('@/features/admin/pages/AdminPaymentsPage'));
 const AdminInventoryPage = lazy(() => import('@/features/admin/pages/AdminInventoryPage'));
 const AdminCustomersPage = lazy(() => import('@/features/admin/pages/AdminCustomersPage'));
 const AdminReviewsPage = lazy(() => import('@/features/admin/pages/AdminReviewsPage'));
@@ -124,6 +128,10 @@ export const router = createBrowserRouter([
           // not overlap), but keeping create above edit matches how they read.
           { path: 'products/new', element: page(<AdminProductFormPage />) },
           { path: 'products/:id/edit', element: page(<AdminProductFormPage />) },
+          { path: 'categories', element: page(<AdminCategoriesPage />) },
+          { path: 'brands', element: page(<AdminBrandsPage />) },
+          { path: 'media', element: page(<AdminMediaPage />) },
+          { path: 'payments', element: page(<AdminPaymentsPage />) },
           { path: 'inventory', element: page(<AdminInventoryPage />) },
           { path: 'customers', element: page(<AdminCustomersPage />) },
           { path: 'reviews', element: page(<AdminReviewsPage />) },

@@ -20,6 +20,10 @@ const ADMIN = [
   '/admin/products',
   '/admin/products/new',
   '/admin/inventory',
+  '/admin/categories',
+  '/admin/brands',
+  '/admin/media',
+  '/admin/payments',
   '/admin/customers',
   '/admin/coupons',
 ];

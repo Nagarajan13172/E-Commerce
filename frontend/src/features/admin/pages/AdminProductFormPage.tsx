@@ -154,7 +154,7 @@ export default function AdminProductFormPage() {
   }, [data, reset]);
 
   const categories = categoryData?.categories ?? [];
-  const brands = brandData?.data.items ?? [];
+  const brands = brandData?.items ?? [];
   const status = watch('status');
   const slug = watch('slug');
 

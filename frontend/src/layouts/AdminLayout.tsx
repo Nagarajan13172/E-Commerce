@@ -4,10 +4,14 @@ import {
   BarChart3,
   Boxes,
   ChevronLeft,
+  CreditCard,
+  FolderTree,
+  Images,
   MessageSquare,
   Package,
   ShoppingCart,
   Store,
+  Tag,
   Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -60,6 +64,22 @@ const NAV = [
     icon: MessageSquare,
     end: false,
     permission: 'review:moderate',
+  },
+  {
+    to: '/admin/categories',
+    label: 'Categories',
+    icon: FolderTree,
+    end: false,
+    permission: 'category:write',
+  },
+  { to: '/admin/brands', label: 'Brands', icon: Tag, end: false, permission: 'product:write' },
+  { to: '/admin/media', label: 'Media', icon: Images, end: false, permission: 'media:write' },
+  {
+    to: '/admin/payments',
+    label: 'Payments',
+    icon: CreditCard,
+    end: false,
+    permission: 'payment:read',
   },
   {
     to: '/admin/coupons',

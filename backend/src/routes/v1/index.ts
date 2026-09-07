@@ -3,6 +3,7 @@ import healthRoutes from './health.route.js';
 import authRoutes from './auth.route.js';
 import catalogRoutes from './catalog.route.js';
 import cartRoutes from './cart.route.js';
+import checkoutRoutes from './checkout.route.js';
 import accountRoutes from './account.route.js';
 import adminRoutes from './admin/index.js';
 
@@ -20,6 +21,7 @@ router.use('/auth', authRoutes);
 router.use('/', catalogRoutes);
 
 router.use('/cart', cartRoutes);
+router.use('/checkout', checkoutRoutes);
 router.use('/account', accountRoutes);
 
 router.use('/admin', adminRoutes);

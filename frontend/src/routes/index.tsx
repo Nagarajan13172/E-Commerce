@@ -20,6 +20,7 @@ const HomePage = lazy(() => import('@/features/home/HomePage'));
 const ProductListingPage = lazy(() => import('@/features/catalog/ProductListingPage'));
 const ProductDetailPage = lazy(() => import('@/features/catalog/ProductDetailPage'));
 const CartPage = lazy(() => import('@/features/cart/CartPage'));
+const CheckoutPage = lazy(() => import('@/features/checkout/CheckoutPage'));
 
 const LoginPage = lazy(() => import('@/features/auth/LoginPage'));
 const RegisterPage = lazy(() => import('@/features/auth/RegisterPage'));
@@ -48,6 +49,10 @@ export const router = createBrowserRouter([
           { path: 'products', element: page(<ProductListingPage />) },
           { path: 'products/:slug', element: page(<ProductDetailPage />) },
           { path: 'cart', element: page(<CartPage />) },
+          {
+            path: 'checkout',
+            element: <RequireAuth>{page(<CheckoutPage />)}</RequireAuth>,
+          },
 
           // ── Account (authenticated) ──────────────────────────────────────
           {

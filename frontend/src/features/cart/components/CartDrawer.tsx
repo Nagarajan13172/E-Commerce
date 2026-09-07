@@ -76,10 +76,21 @@ export function CartDrawer() {
             </ul>
 
             <SheetFooter className="border-t px-5 py-4">
+              {cart.coupon?.valid && cart.coupon.discount > 0 && (
+                <div className="text-success mb-1.5 flex w-full items-center justify-between text-sm">
+                  <span>Discount ({cart.coupon.code})</span>
+                  <span className="tabular">
+                    −{formatCurrency(cart.coupon.discount, cart.currency)}
+                  </span>
+                </div>
+              )}
               <div className="mb-3 flex w-full items-center justify-between">
                 <span className="text-sm font-medium">Subtotal</span>
                 <span className="text-lg font-semibold tabular">
-                  {formatCurrency(cart.subtotal, cart.currency)}
+                  {formatCurrency(
+                    Math.max(0, cart.subtotal - (cart.coupon?.valid ? cart.coupon.discount : 0)),
+                    cart.currency,
+                  )}
                 </span>
               </div>
               <p className="text-muted-foreground mb-3 text-xs">

@@ -1,5 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { uiReducer } from './slices/uiSlice';
+import { checkoutReducer } from './slices/checkoutSlice';
 
 /**
  * Redux Toolkit store — **client state only**.
@@ -20,6 +21,9 @@ import { uiReducer } from './slices/uiSlice';
 export const store = configureStore({
   reducer: {
     ui: uiReducer,
+    // Wizard progress: which step, which address highlighted, which delivery
+    // speed. The *amounts* those choices produce come from the server.
+    checkout: checkoutReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

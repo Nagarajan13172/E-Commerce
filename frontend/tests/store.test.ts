@@ -26,12 +26,30 @@ describe('store composition', () => {
   it('contains no server-state slices', () => {
     const state = appStore.getState();
 
-    expect(Object.keys(state)).toEqual(['ui']);
-    // The session in particular is fetched, not stored — mirroring it would
-    // need an effect to stay in step and could disagree with the database.
-    expect(state).not.toHaveProperty('auth');
-    expect(state).not.toHaveProperty('products');
-    expect(state).not.toHaveProperty('cart');
+    // Asserted as a property rather than an exact slice list, so adding a
+    // legitimate client-state slice does not break this test — while adding a
+    // slice that caches server data still does.
+    const SERVER_OWNED = ['auth', 'products', 'catalog', 'cart', 'orders', 'wishlist', 'addresses'];
+    for (const key of SERVER_OWNED) {
+      expect(state).not.toHaveProperty(key);
+    }
+
+    // Everything present must be client state the server has no opinion about.
+    const CLIENT_OWNED = ['ui', 'checkout'];
+    expect(Object.keys(state).every((key) => CLIENT_OWNED.includes(key))).toBe(true);
+  });
+
+  it('keeps money out of the checkout slice', () => {
+    // The wizard records CHOICES; the amounts those choices cost come from
+    // /checkout/quote. A total cached here would be a second source of truth
+    // for money — able to disagree with what the customer is actually charged.
+    // Asserted against the runtime keys, not a cast — a cast that TypeScript
+    // rejects would be hiding the very drift this test exists to catch.
+    const checkoutKeys = Object.keys(appStore.getState().checkout);
+
+    for (const key of ['subtotal', 'total', 'grandTotal', 'discount', 'tax', 'shipping']) {
+      expect(checkoutKeys).not.toContain(key);
+    }
   });
 
   it('is synchronous and pure, so it needs no network to exercise', () => {

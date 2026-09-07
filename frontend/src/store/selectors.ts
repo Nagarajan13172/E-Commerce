@@ -20,3 +20,10 @@ export const selectMobileNavOpen = (state: RootState) => state.ui.mobileNavOpen;
 export const selectMobileFilterOpen = (state: RootState) => state.ui.mobileFilterOpen;
 export const selectSearchOpen = (state: RootState) => state.ui.searchOpen;
 export const selectAdminSidebarCollapsed = (state: RootState) => state.ui.adminSidebarCollapsed;
+
+// ── Checkout wizard ─────────────────────────────────────────────────────────
+export const selectCheckout = (state: RootState) => state.checkout;
+export const selectCheckoutStep = (state: RootState) => state.checkout.step;
+export const selectDeliveryMethod = (state: RootState) => state.checkout.deliveryMethod;
+export const selectSelectedAddressId = (state: RootState) => state.checkout.addressId;
+export const selectCompletedSteps = (state: RootState) => state.checkout.completed;

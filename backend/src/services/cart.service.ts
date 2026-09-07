@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Types } from 'mongoose';
 import { CART_LIMITS, ERROR_CODES, type AddCartItemInput } from '@ecom/shared';
+import { buildCouponLines, evaluateCoupon, type CouponEvaluation } from './coupon.service.js';
 import { Cart, type CartDocument } from '../models/cart.model.js';
 import { Product, type IProductVariant } from '../models/product.model.js';
 import { AppError } from '../utils/AppError.js';
@@ -52,6 +53,15 @@ export interface CartView {
   currency: string;
   /** True when any line needs the customer's attention before checkout. */
   hasIssues: boolean;
+  /**
+   * The applied coupon, re-evaluated on every read.
+   *
+   * A coupon that was valid when applied can stop being valid before checkout —
+   * it can expire, hit its limit, or stop qualifying because the customer
+   * removed the item it covered. Re-checking here is what keeps a stale
+   * discount from surviving to the charge.
+   */
+  coupon?: CouponEvaluation;
 }
 
 const EMPTY_CART: CartView = {
@@ -223,7 +233,7 @@ export async function getCart(owner: CartOwner): Promise<CartView> {
     lines.push(line);
   }
 
-  return {
+  const view: CartView = {
     id: String(cart._id),
     items: lines,
     itemCount: lines.reduce((sum, line) => sum + line.quantity, 0),
@@ -231,6 +241,60 @@ export async function getCart(owner: CartOwner): Promise<CartView> {
     currency: cart.currency,
     hasIssues,
   };
+
+  if (cart.couponCode) {
+    view.coupon = await evaluateCartCoupon(cart.couponCode, lines, owner.userId);
+  }
+
+  return view;
+}
+
+/** Re-evaluate the stored coupon against the cart as it stands right now. */
+async function evaluateCartCoupon(
+  code: string,
+  lines: CartLine[],
+  userId?: string,
+): Promise<CouponEvaluation> {
+  const couponLines = await buildCouponLines(
+    lines
+      // A line that cannot be bought cannot contribute to a discount either.
+      .filter((line) => !line.issue)
+      .map((line) => ({ productId: line.product.id, lineSubtotal: line.lineTotal })),
+  );
+
+  return evaluateCoupon({ code, lines: couponLines, userId });
+}
+
+// ── Coupons ─────────────────────────────────────────────────────────────────
+
+/**
+ * Attach a coupon to the cart.
+ *
+ * Rejected up front so the customer gets an immediate, specific reason rather
+ * than discovering at checkout that their code did nothing.
+ */
+export async function applyCoupon(owner: CartOwner, code: string): Promise<CartView> {
+  const view = await getCart(owner);
+  if (view.items.length === 0) {
+    throw AppError.unprocessable('Add something to your bag first', ERROR_CODES.CART_EMPTY);
+  }
+
+  const evaluation = await evaluateCartCoupon(code, view.items, owner.userId);
+  if (!evaluation.valid) {
+    throw AppError.unprocessable(
+      evaluation.message ?? 'That coupon cannot be used',
+      ERROR_CODES.COUPON_INVALID,
+      { rejection: evaluation.rejection },
+    );
+  }
+
+  await Cart.updateOne(ownerFilter(owner), { $set: { couponCode: evaluation.code } });
+  return getCart(owner);
+}
+
+export async function removeCoupon(owner: CartOwner): Promise<CartView> {
+  await Cart.updateOne(ownerFilter(owner), { $unset: { couponCode: '' } });
+  return getCart(owner);
 }
 
 // ── Write ───────────────────────────────────────────────────────────────────

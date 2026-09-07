@@ -1,3 +1,5 @@
+import type { CouponRejection } from '@ecom/shared';
+
 export interface CartLine {
   itemId: string;
   product: {
@@ -20,6 +22,23 @@ export interface CartLine {
   issue?: 'out_of_stock' | 'insufficient_stock' | 'unavailable';
 }
 
+/**
+ * The applied coupon, as the server re-evaluated it on this read.
+ *
+ * `valid` can be false for a coupon that was accepted earlier — it may have
+ * expired, hit its limit, or stopped qualifying because the covered item was
+ * removed. The UI surfaces that rather than silently dropping the discount.
+ */
+export interface CouponEvaluation {
+  valid: boolean;
+  code: string;
+  discount: number;
+  freeShipping: boolean;
+  description?: string;
+  rejection?: CouponRejection;
+  message?: string;
+}
+
 export interface Cart {
   id: string | null;
   items: CartLine[];
@@ -27,6 +46,7 @@ export interface Cart {
   subtotal: number;
   currency: string;
   hasIssues: boolean;
+  coupon?: CouponEvaluation;
 }
 
 export interface Address {

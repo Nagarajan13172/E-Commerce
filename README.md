@@ -24,8 +24,8 @@ decision in the codebase:
 | 2     | Models, auth, RBAC, storage/email/cache integrations                | ✅ Complete |
 | 3     | Categories, brands, products, variants, search, media, seed data    | ✅ Complete |
 | 4     | Storefront: home, listing, PDP, search, account, wishlist, cart     | ✅ Complete |
-| 5     | Coupons, pricing service, multi-step checkout                       | ⏳ Next     |
-| 6     | Orders, payments, inventory reservation, notifications              | —           |
+| 5     | Coupons, pricing service, multi-step checkout                       | ✅ Complete |
+| 6     | Orders, payments, inventory reservation, notifications              | ⏳ Next     |
 | 7     | Admin panel and analytics                                           | —           |
 | 8     | Testing, security, performance and accessibility hardening          | —           |
 

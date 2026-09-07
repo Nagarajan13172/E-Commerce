@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { slugParamSchema } from '@ecom/shared';
 import * as catalog from '../../controllers/catalog.controller.js';
+import * as checkout from '../../controllers/checkout.controller.js';
 import { validate } from '../../middleware/validate.js';
 import { searchLimiter } from '../../middleware/rateLimit.js';
 
@@ -27,6 +28,8 @@ router.get('/search/suggest', searchLimiter, catalog.suggest);
 
 router.get('/categories', catalog.listCategories);
 router.get('/categories/:slug', validate({ params: slugParamSchema }), catalog.getCategory);
+
+router.get('/offers', checkout.listOffers);
 
 router.get('/brands', catalog.listBrands);
 router.get('/brands/:slug', validate({ params: slugParamSchema }), catalog.getBrand);

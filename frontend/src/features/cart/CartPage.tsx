@@ -9,15 +9,16 @@ import { ErrorState } from '@/components/common/ErrorState';
 import { Price } from '@/components/common/Price';
 import { Seo } from '@/components/common/Seo';
 import { useCart, useRemoveCartItem, useUpdateCartItem } from './api/queries';
+import { CouponInput } from '@/features/checkout/components/CouponInput';
 import { formatCurrency } from '@/lib/format';
 
 /**
  * The full bag page.
  *
- * The order summary shows only what is genuinely known at this point: the
- * subtotal. Shipping, tax and any discount are computed by the server at
- * checkout, and inventing an estimate here would risk showing a total that does
- * not match what is charged.
+ * The summary shows the subtotal and, once a coupon is applied, the discount the
+ * server calculated. Shipping and tax are deliberately left to checkout: they
+ * depend on the delivery address and speed, and estimating them here would risk
+ * showing a total that does not match what is charged.
  */
 export default function CartPage() {
   const { data: cart, isPending, isError, error, refetch } = useCart();
@@ -191,6 +192,10 @@ export default function CartPage() {
               <CardContent className="pt-6">
                 <h2 className="text-base font-semibold">Order summary</h2>
 
+                <div className="mt-4">
+                  <CouponInput coupon={cart.coupon} />
+                </div>
+
                 <dl className="mt-4 space-y-2.5 text-sm">
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">
@@ -198,6 +203,15 @@ export default function CartPage() {
                     </dt>
                     <dd className="tabular">{formatCurrency(cart.subtotal, cart.currency)}</dd>
                   </div>
+
+                  {cart.coupon?.valid && cart.coupon.discount > 0 && (
+                    <div className="text-success flex justify-between">
+                      <dt>Discount ({cart.coupon.code})</dt>
+                      <dd className="tabular">
+                        −{formatCurrency(cart.coupon.discount, cart.currency)}
+                      </dd>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Delivery</dt>
                     <dd className="text-muted-foreground text-xs">Calculated at checkout</dd>
@@ -211,9 +225,14 @@ export default function CartPage() {
                 <Separator className="my-4" />
 
                 <div className="flex items-baseline justify-between">
-                  <span className="font-medium">Subtotal</span>
+                  <span className="font-medium">
+                    {cart.coupon?.valid ? 'Estimated total' : 'Subtotal'}
+                  </span>
                   <span className="text-xl font-semibold tabular">
-                    {formatCurrency(cart.subtotal, cart.currency)}
+                    {formatCurrency(
+                      Math.max(0, cart.subtotal - (cart.coupon?.valid ? cart.coupon.discount : 0)),
+                      cart.currency,
+                    )}
                   </span>
                 </div>
 

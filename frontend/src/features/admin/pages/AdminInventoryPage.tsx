@@ -23,6 +23,7 @@ import { formatDateTime } from '@/lib/format';
 import { useAdjustStock, useInventory, useInventoryHistory } from '../api/queries';
 import { AdminTable, type Column } from '../components/AdminTable';
 import type { InventoryRow } from '../api/admin.api';
+import { toneClass } from '@/components/common/StatusBadge';
 
 export default function AdminInventoryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -82,7 +83,7 @@ export default function AdminInventoryPage() {
             row.available === 0
               ? 'text-destructive font-medium tabular'
               : row.available <= row.lowStockThreshold
-                ? 'text-warning-foreground font-medium tabular'
+                ? 'text-warning-tint-foreground font-medium tabular'
                 : 'tabular'
           }
         >
@@ -111,11 +112,11 @@ export default function AdminInventoryPage() {
       header: '',
       render: (row) =>
         row.available === 0 ? (
-          <Badge variant="secondary" className="bg-destructive/15 text-destructive">
+          <Badge variant="secondary" className={toneClass('danger')}>
             Out of stock
           </Badge>
         ) : row.available <= row.lowStockThreshold ? (
-          <Badge variant="secondary" className="bg-warning/15 text-warning-foreground">
+          <Badge variant="secondary" className={toneClass('warning')}>
             Low
           </Badge>
         ) : null,

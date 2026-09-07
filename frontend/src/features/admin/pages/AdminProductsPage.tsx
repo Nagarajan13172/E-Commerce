@@ -20,6 +20,7 @@ import { formatCurrency } from '@/lib/format';
 import { useAdminProducts, useBulkProductAction } from '../api/queries';
 import { AdminTable, type Column } from '../components/AdminTable';
 import type { AdminProductRow } from '../api/admin.api';
+import { toneClass } from '@/components/common/StatusBadge';
 
 const BULK_ACTIONS = [
   { value: 'publish', label: 'Publish' },
@@ -168,10 +169,10 @@ export default function AdminProductsPage() {
             variant="secondary"
             className={
               product.status === 'active'
-                ? 'bg-success/15 text-success capitalize'
+                ? `${toneClass('success')} capitalize`
                 : product.status === 'draft'
-                  ? 'bg-warning/15 text-warning-foreground capitalize'
-                  : 'bg-muted text-muted-foreground capitalize'
+                  ? `${toneClass('warning')} capitalize`
+                  : `${toneClass('neutral')} capitalize`
             }
           >
             {product.status}

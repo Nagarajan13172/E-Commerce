@@ -27,11 +27,17 @@ decision in the codebase:
 | 5     | Coupons, pricing service, multi-step checkout                       | ✅ Complete |
 | 6     | Orders, payments, inventory reservation, notifications              | ✅ Complete |
 | 7     | Admin panel and analytics                                           | ✅ Complete |
-| 8     | Testing, security, performance and accessibility hardening          | ⏳ Next     |
+| 8     | Testing, security, performance and accessibility hardening          | ✅ Complete |
 
 Cart was pulled forward from Phase 5 into Phase 4 — a storefront you can browse but
 cannot add to is not a coherent checkpoint. Phase 5 is therefore coupons, the pricing
 service and checkout.
+
+---
+
+Design decisions that were genuinely contested — embedded variants, cookie auth,
+Zod-instead-of-sanitizer, the Query/Redux split, the provider interfaces, and the
+SEO limits of client-side rendering — are recorded in [docs/adr](docs/adr).
 
 ---
 
@@ -161,7 +167,9 @@ pnpm format           # Prettier write
 pnpm test             # Vitest across every package
 pnpm test:backend     # backend tests only
 pnpm test:frontend    # frontend tests only
-pnpm seed             # populate the database with demo data (Phase 3)
+pnpm test:e2e         # Playwright: journeys, accessibility, responsiveness
+                      #   needs docker:up + seed + dev running
+pnpm seed             # populate the database with demo data
 ```
 
 Package names map to folders: `@ecom/backend`, `@ecom/frontend`, `@ecom/shared`. Any of
@@ -425,8 +433,17 @@ than waiting on three resizes.
 ## Testing
 
 ```bash
-pnpm test:backend
+pnpm test           # backend + frontend unit and integration suites
+pnpm test:backend   # 331 tests: services, routes, authorization, security, indexes
+pnpm test:e2e       # 26 Playwright tests: journeys, accessibility, responsiveness
 ```
+
+`pnpm test` is safe to run anywhere: it uses an in-memory database and needs no
+infrastructure. `pnpm test:e2e` deliberately does not — it drives a real browser
+against a running stack (`pnpm docker:up && pnpm seed && pnpm dev`), because the bugs
+it exists to catch only appear once the pieces are joined up. Keeping it separate means
+`pnpm test` never fails for want of a Docker daemon, which is the failure mode that
+teaches people to ignore a suite.
 
 Integration tests run against an in-memory **`MongoMemoryReplSet`**, not a standalone
 server — otherwise the transaction-based inventory logic, which is the single most
@@ -446,6 +463,46 @@ client-supplied `role: "admin"` being stripped at registration.
 callers, 403 for customers, and 403 for `support` on each write endpoint. The list is
 exhaustive rather than sampled on purpose: an unguarded admin endpoint is the single
 worst bug this codebase could ship, and a sample would let one through.
+
+`security.test.ts` is written as attacks rather than features — an operator object in
+place of an email, a role smuggled into a registration payload, one customer reaching
+for another's address, a forged CSRF token, a regex metacharacter in a search box. Each
+one would be a real vulnerability if it passed.
+
+`indexes.test.ts` asserts the index topology, which sounds like plumbing and is not.
+The suite had been running for seven phases against databases carrying only `_id_` on
+every collection: Mongoose builds indexes in the background and the tests were winning
+that race. Unique constraints were therefore never actually enforced during a test, and
+a `$text` search failed outright. The helper now awaits `syncIndexes()` before the first
+test, and these assertions stop it regressing — including an `explain()` check that a
+catalogue listing uses an `IXSCAN` rather than a collection scan.
+
+### End-to-end and accessibility
+
+`pnpm test:e2e` covers the shopping journey, the admin journeys, and two gates that are
+easy to lose without one:
+
+- **Accessibility.** Every storefront and admin page is scanned with axe in _both_
+  themes. Light passing says nothing about dark: `--warning-foreground` is dark by
+  design, and it was measuring 1.35:1 against its own dark tint.
+- **Responsiveness.** No page may scroll sideways at 375, 768, 1024, 1440 or 1920px.
+
+Sign-in happens once per role and is reused via stored session state — across runs, not
+just across tests. That is not only faster: `authLimiter` permits ten attempts per
+fifteen minutes per (IP, email), and a suite that signs in afresh every time trips it,
+then fails later tests with a 429 that looks like a broken login.
+
+The same lesson applies more broadly, and cost an hour to learn. A rate-limited write
+does not surface as an error the user sees — the optimistic update simply rolls back, so
+an add-to-basket click appears to do nothing at all. `globalLimiter` and `writeLimiter`
+are therefore raised outside production (3,000 and 600 per minute rather than 300 and
+60), because one developer with hot reload plus a browser suite loading sixty pages
+legitimately exceeds a production ceiling from a single loopback address. They stay in
+the request path, so a runaway loop is still caught.
+
+The auth, email and checkout limiters are **not** relaxed. Their numbers describe what
+abuse looks like rather than what a busy developer looks like, and a test suite has no
+business exceeding them.
 
 ---
 

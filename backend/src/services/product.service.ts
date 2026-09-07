@@ -4,6 +4,7 @@ import { Category } from '../models/category.model.js';
 import { Product, type ProductDocument } from '../models/product.model.js';
 import { AppError } from '../utils/AppError.js';
 import { uniqueSlug } from '../utils/slug.js';
+import { escapeRegex } from '../utils/regex.js';
 import { cache, cacheKeys, CACHE_TTL } from '../integrations/cache/index.js';
 import { getDescendantIds } from './category.service.js';
 
@@ -140,7 +141,7 @@ export async function listProductsForAdmin(query: AdminProductQuery) {
     // Admins search by SKU as often as by name, and expect partial matches on
     // both — which `$text` (whole-word only) cannot do. An anchored regex on the
     // indexed fields is the right tool at admin-list scale.
-    const term = query.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const term = escapeRegex(query.q);
     filter.$or = [
       { name: { $regex: term, $options: 'i' } },
       { sku: { $regex: `^${term}`, $options: 'i' } },

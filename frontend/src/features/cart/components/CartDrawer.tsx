@@ -63,7 +63,7 @@ export function CartDrawer() {
         ) : (
           <>
             {cart.hasIssues && (
-              <div className="bg-warning/10 text-warning-foreground border-warning/30 flex items-start gap-2 border-b px-5 py-3 text-sm">
+              <div className="bg-warning/10 text-warning-tint-foreground border-warning/30 flex items-start gap-2 border-b px-5 py-3 text-sm">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
                 <p>Some items need your attention before checkout.</p>
               </div>
@@ -122,7 +122,15 @@ function CartDrawerLine({ line, onNavigate }: { line: CartLine; onNavigate: () =
 
   return (
     <li className="flex gap-3 p-4">
-      <Link to={`/products/${line.product.slug}`} onClick={onNavigate} className="shrink-0">
+      {/* Duplicate of the product-name link beside it; skipped in the tab
+          order because an image-only link has no accessible name. */}
+      <Link
+        to={`/products/${line.product.slug}`}
+        onClick={onNavigate}
+        className="shrink-0"
+        tabIndex={-1}
+        aria-hidden="true"
+      >
         <img
           src={line.product.thumbnail}
           alt=""
@@ -155,7 +163,7 @@ function CartDrawerLine({ line, onNavigate }: { line: CartLine; onNavigate: () =
         )}
 
         {line.priceChanged && (
-          <p className="text-warning-foreground mt-1 text-xs">
+          <p className="text-warning-tint-foreground mt-1 text-xs">
             Price changed to {formatCurrency(line.priceChanged.to)}
           </p>
         )}

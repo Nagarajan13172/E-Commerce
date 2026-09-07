@@ -22,6 +22,7 @@
     "test": "pnpm -r test",
     "test:backend": "pnpm --filter @ecom/backend test",
     "test:frontend": "pnpm --filter @ecom/frontend test",
+    "test:e2e": "pnpm --filter @ecom/frontend test:e2e",
     "seed": "pnpm --filter @ecom/backend seed",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",

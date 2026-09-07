@@ -123,7 +123,10 @@ export default function DashboardPage() {
             <Link to="/admin/inventory?lowStockOnly=1" className="rounded-lg">
               <Card className="hover:border-warning/40 transition-colors">
                 <CardContent className="flex items-center gap-3 pt-6">
-                  <AlertTriangle className="text-warning-foreground size-5" aria-hidden="true" />
+                  <AlertTriangle
+                    className="text-warning-tint-foreground size-5"
+                    aria-hidden="true"
+                  />
                   <div>
                     <p className="text-sm font-medium tabular">
                       {summary.totals.lowStock} product

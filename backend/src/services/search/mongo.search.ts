@@ -10,6 +10,7 @@ import type {
   SearchResultItem,
   SearchService,
 } from './SearchService.js';
+import { escapeRegex } from '../../utils/regex.js';
 
 /**
  * MongoDB-backed product search.
@@ -442,10 +443,6 @@ export class MongoSearchService implements SearchService {
 }
 
 /** User input reaching a regex must be escaped or it can alter the pattern. */
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }

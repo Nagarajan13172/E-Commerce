@@ -30,11 +30,12 @@ import { formatDate } from '@/lib/format';
 import { useAdminCustomers, useUpdateCustomerRole, useUpdateCustomerStatus } from '../api/queries';
 import { AdminTable, type Column } from '../components/AdminTable';
 import type { AdminCustomer } from '../api/admin.api';
+import { toneClass } from '@/components/common/StatusBadge';
 
 const STATUS_TONE: Record<UserStatus, string> = {
-  active: 'bg-success/15 text-success',
-  disabled: 'bg-muted text-muted-foreground',
-  banned: 'bg-destructive/15 text-destructive',
+  active: toneClass('success'),
+  disabled: toneClass('neutral'),
+  banned: toneClass('danger'),
 };
 
 export default function AdminCustomersPage() {

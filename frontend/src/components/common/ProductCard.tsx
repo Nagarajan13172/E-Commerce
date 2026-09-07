@@ -78,7 +78,7 @@ export function ProductCard({
 
         <div className="absolute top-2 left-2 flex flex-col gap-1.5">
           {product.discountPercent > 0 && (
-            <Badge className="bg-price-sale text-white hover:bg-price-sale">
+            <Badge className="bg-price-sale-solid text-white hover:bg-price-sale-solid">
               {product.discountPercent}% off
             </Badge>
           )}

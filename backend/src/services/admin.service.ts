@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { escapeRegex } from '../utils/regex.js';
 import {
   ERROR_CODES,
   type AdminCouponQuery,
@@ -21,11 +22,6 @@ import { revokeAllUserTokens } from './token.service.js';
 import { createLogger } from '../config/logger.js';
 
 const log = createLogger('admin');
-
-/** Escape user input before it reaches a regex, or it can alter the pattern. */
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 // ── Orders ──────────────────────────────────────────────────────────────────
 

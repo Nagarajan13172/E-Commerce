@@ -66,7 +66,7 @@ export default function CartPage() {
               {cart.hasIssues && (
                 <div className="border-warning/30 bg-warning/10 mb-4 flex items-start gap-2.5 rounded-lg border p-3 text-sm">
                   <AlertTriangle
-                    className="text-warning-foreground mt-0.5 size-4 shrink-0"
+                    className="text-warning-tint-foreground mt-0.5 size-4 shrink-0"
                     aria-hidden="true"
                   />
                   <p>
@@ -79,7 +79,17 @@ export default function CartPage() {
               <ul className="divide-y rounded-xl border">
                 {cart.items.map((line) => (
                   <li key={line.itemId} className="flex gap-4 p-4">
-                    <Link to={`/products/${line.product.slug}`} className="shrink-0">
+                    {/* The thumbnail links to the same page as the product
+                        name directly beside it. Left in the tab order it is a
+                        second stop with no accessible name at all (axe:
+                        "link-name"), so it is hidden from assistive technology
+                        and skipped — a mouse user still gets the target. */}
+                    <Link
+                      to={`/products/${line.product.slug}`}
+                      className="shrink-0"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                    >
                       <img
                         src={line.product.thumbnail}
                         alt=""
@@ -119,7 +129,7 @@ export default function CartPage() {
                       )}
 
                       {line.priceChanged && (
-                        <p className="text-warning-foreground mt-1 text-xs">
+                        <p className="text-warning-tint-foreground mt-1 text-xs">
                           Price changed from {formatCurrency(line.priceChanged.from)} to{' '}
                           {formatCurrency(line.priceChanged.to)}
                         </p>

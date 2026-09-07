@@ -1,6 +1,6 @@
 import rateLimit, { ipKeyGenerator, type Options } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
-import { isTest } from '../config/env.js';
+import { isProduction, isTest } from '../config/env.js';
 import { cache, RedisCache } from '../integrations/cache/index.js';
 import { AppError } from '../utils/AppError.js';
 import { createLogger } from '../config/logger.js';
@@ -47,11 +47,26 @@ const base: Partial<Options> = {
   },
 };
 
-/** Broad protection for the whole API. */
+/**
+ * Broad protection for the whole API.
+ *
+ * 300 requests a minute per IP is a sensible production ceiling — comfortably
+ * above what any real person generates, low enough to blunt a crawler.
+ *
+ * Outside production the ceiling is raised rather than removed. One developer
+ * with hot reload, plus a browser test suite that loads sixty pages in a couple
+ * of minutes, legitimately exceeds 300/min from a single loopback address. The
+ * failure mode is genuinely misleading: a 429 on `POST /cart/items` rolls the
+ * optimistic update back, so an add-to-basket click appears simply to do
+ * nothing. Raising the limit keeps the middleware in the path — a runaway loop
+ * still gets caught — without that costing an afternoon of debugging.
+ */
+const GLOBAL_LIMIT = isProduction ? 300 : 3_000;
+
 export const globalLimiter = rateLimit({
   ...base,
   windowMs: 60_000,
-  limit: 300,
+  limit: GLOBAL_LIMIT,
   store: store(),
 });
 
@@ -91,11 +106,23 @@ export const searchLimiter = rateLimit({
   store: store(),
 });
 
-/** Writes are costlier than reads and worth a tighter ceiling. */
+/**
+ * Writes are costlier than reads and worth a tighter ceiling.
+ *
+ * Raised outside production for the same reason as `globalLimiter`, and it
+ * matters more here: a 429 on `POST /cart/items` rolls the optimistic update
+ * back, so the click looks like it simply did nothing. Two consecutive runs of
+ * the browser suite were enough to trip 60/minute and produce exactly that.
+ *
+ * The auth, email and checkout limiters below are deliberately NOT relaxed.
+ * Their numbers express what abuse looks like — ten sign-in attempts, five
+ * password-reset emails, a handful of checkouts — rather than what a busy
+ * developer looks like, and a test suite has no business exceeding them.
+ */
 export const writeLimiter = rateLimit({
   ...base,
   windowMs: 60_000,
-  limit: 60,
+  limit: isProduction ? 60 : 600,
   store: store(),
 });
 

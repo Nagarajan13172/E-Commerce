@@ -33,6 +33,7 @@ import { formatCurrency, formatDate } from '@/lib/format';
 import { useAdminCoupons, useCreateCoupon, useDeactivateCoupon } from '../api/queries';
 import { AdminTable, type Column } from '../components/AdminTable';
 import type { AdminCoupon } from '../api/admin.api';
+import { toneClass } from '@/components/common/StatusBadge';
 
 /**
  * An empty optional number field yields `NaN` under `valueAsNumber`, and Zod
@@ -112,10 +113,10 @@ export default function AdminCouponsPage() {
             variant="secondary"
             className={
               !coupon.isActive
-                ? 'bg-muted text-muted-foreground'
+                ? toneClass('neutral')
                 : isExpired
-                  ? 'bg-warning/15 text-warning-foreground'
-                  : 'bg-success/15 text-success'
+                  ? toneClass('warning')
+                  : toneClass('success')
             }
           >
             {!coupon.isActive ? 'Inactive' : isExpired ? 'Expired' : 'Live'}

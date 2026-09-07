@@ -220,7 +220,7 @@ export default function ProductDetailPage() {
                 currency={product.currency}
               />
               {selection.compareAtPrice && selection.compareAtPrice > selection.price && (
-                <Badge className="bg-price-sale hover:bg-price-sale text-white">
+                <Badge className="bg-price-sale-solid hover:bg-price-sale-solid text-white">
                   {Math.round(
                     ((selection.compareAtPrice - selection.price) / selection.compareAtPrice) * 100,
                   )}
@@ -250,7 +250,7 @@ export default function ProductDetailPage() {
                   Out of stock
                 </p>
               ) : isLowStock ? (
-                <p className="text-warning-foreground text-sm font-medium">
+                <p className="text-warning-tint-foreground text-sm font-medium">
                   Only {selection.availableStock} left in stock
                 </p>
               ) : (

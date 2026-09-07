@@ -21,6 +21,7 @@ import { Seo } from '@/components/common/Seo';
 import { Pagination } from '@/features/catalog/components/Pagination';
 import { formatDate } from '@/lib/format';
 import { useAdminReviews, useModerateReview, useRespondToReview } from '../api/queries';
+import { toneClass } from '@/components/common/StatusBadge';
 
 /**
  * Review moderation queue.
@@ -139,7 +140,7 @@ export default function AdminReviewsPage() {
 
                       <div className="flex items-center gap-2">
                         {review.reportedCount > 0 && (
-                          <Badge variant="secondary" className="bg-destructive/15 text-destructive">
+                          <Badge variant="secondary" className={toneClass('danger')}>
                             <Flag className="size-3" aria-hidden="true" />
                             {review.reportedCount}
                           </Badge>

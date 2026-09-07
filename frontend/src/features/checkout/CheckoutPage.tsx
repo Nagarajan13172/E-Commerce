@@ -26,6 +26,7 @@ import { AddressStep } from './components/AddressStep';
 import { DeliveryStep } from './components/DeliveryStep';
 import { OrderSummary } from './components/OrderSummary';
 import { CouponInput } from './components/CouponInput';
+import { PaymentStep } from './components/PaymentStep';
 import { formatCurrency } from '@/lib/format';
 
 /**
@@ -187,6 +188,15 @@ export default function CheckoutPage() {
                   <ReviewStep
                     quote={quote.data}
                     canPlaceOrder={quote.data?.canPlaceOrder ?? false}
+                    onContinue={() => dispatch(completeStep('review'))}
+                  />
+                )}
+
+                {checkout.step === 'payment' && (
+                  <PaymentStep
+                    quote={quote.data}
+                    addressId={checkout.addressId}
+                    deliveryMethod={checkout.deliveryMethod}
                   />
                 )}
               </CardContent>
@@ -299,6 +309,7 @@ function ContactStep({
 function ReviewStep({
   quote,
   canPlaceOrder,
+  onContinue,
 }: {
   quote?: {
     shippingAddress?: {
@@ -312,6 +323,7 @@ function ReviewStep({
     };
   };
   canPlaceOrder: boolean;
+  onContinue: () => void;
 }) {
   const address = quote?.shippingAddress;
 
@@ -344,17 +356,21 @@ function ReviewStep({
 
       <Separator className="my-5" />
 
-      {/* Payment is wired in the next phase. The button is deliberately inert
-          and says so, rather than pretending to take money. */}
-      <Button type="button" size="lg" className="w-full" disabled>
+      <Button
+        type="button"
+        size="lg"
+        className="w-full"
+        disabled={!canPlaceOrder}
+        onClick={onContinue}
+      >
         <Lock className="size-4" aria-hidden="true" />
         Continue to payment
       </Button>
-      <p className="text-muted-foreground mt-2.5 text-center text-xs">
-        {canPlaceOrder
-          ? 'Payment and order placement arrive in the next phase.'
-          : 'Resolve the issues above to continue.'}
-      </p>
+      {!canPlaceOrder && (
+        <p className="text-muted-foreground mt-2.5 text-center text-xs">
+          Resolve the issues above to continue.
+        </p>
+      )}
     </>
   );
 }

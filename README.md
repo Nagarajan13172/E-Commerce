@@ -25,8 +25,8 @@ decision in the codebase:
 | 3     | Categories, brands, products, variants, search, media, seed data    | ✅ Complete |
 | 4     | Storefront: home, listing, PDP, search, account, wishlist, cart     | ✅ Complete |
 | 5     | Coupons, pricing service, multi-step checkout                       | ✅ Complete |
-| 6     | Orders, payments, inventory reservation, notifications              | ⏳ Next     |
-| 7     | Admin panel and analytics                                           | —           |
+| 6     | Orders, payments, inventory reservation, notifications              | ✅ Complete |
+| 7     | Admin panel and analytics                                           | ⏳ Next     |
 | 8     | Testing, security, performance and accessibility hardening          | —           |
 
 Cart was pulled forward from Phase 5 into Phase 4 — a storefront you can browse but

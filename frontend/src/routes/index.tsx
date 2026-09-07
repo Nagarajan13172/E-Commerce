@@ -21,6 +21,9 @@ const ProductListingPage = lazy(() => import('@/features/catalog/ProductListingP
 const ProductDetailPage = lazy(() => import('@/features/catalog/ProductDetailPage'));
 const CartPage = lazy(() => import('@/features/cart/CartPage'));
 const CheckoutPage = lazy(() => import('@/features/checkout/CheckoutPage'));
+const OrderConfirmationPage = lazy(() => import('@/features/orders/OrderConfirmationPage'));
+const OrdersPage = lazy(() => import('@/features/orders/OrdersPage'));
+const OrderDetailPage = lazy(() => import('@/features/orders/OrderDetailPage'));
 
 const LoginPage = lazy(() => import('@/features/auth/LoginPage'));
 const RegisterPage = lazy(() => import('@/features/auth/RegisterPage'));
@@ -65,8 +68,18 @@ export const router = createBrowserRouter([
             children: [
               { index: true, element: page(<AccountOverviewPage />) },
               { path: 'addresses', element: page(<AddressesPage />) },
+              { path: 'orders', element: page(<OrdersPage />) },
+              { path: 'orders/:orderNumber', element: page(<OrderDetailPage />) },
               { path: 'wishlist', element: page(<WishlistPage />) },
             ],
+          },
+
+          // Outside /account so the confirmation link in the order email works
+          // even for someone whose session has since expired — the page itself
+          // still requires auth, but the URL is stable and shareable.
+          {
+            path: 'orders/:orderNumber/confirmation',
+            element: <RequireAuth>{page(<OrderConfirmationPage />)}</RequireAuth>,
           },
 
           { path: '*', element: page(<NotFoundPage />) },

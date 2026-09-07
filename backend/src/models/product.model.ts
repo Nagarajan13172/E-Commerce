@@ -108,6 +108,19 @@ export interface IProduct {
   options: IProductOption[];
   variants: Types.DocumentArray<IProductVariant>;
 
+  /**
+   * Stock for a product with NO variants.
+   *
+   * Deliberately the same shape as `IVariantStock`, so `InventoryService` can
+   * reserve, commit and release through one code path regardless of whether a
+   * product has variants. Inventory is the most safety-critical code in the
+   * system; two parallel implementations of it would be two places for an
+   * oversell bug to hide.
+   *
+   * Ignored when `variants` is non-empty — there, each variant holds its own.
+   */
+  stock: IVariantStock;
+
   /** Flattened facet source: [{ k: 'color', v: 'black' }, …]. Multikey indexed. */
   attributes: { k: string; v: string }[];
   specifications: { group?: string; name: string; value: string }[];
@@ -218,6 +231,14 @@ const productSchema = new Schema<IProduct, Model<IProduct>>(
     },
     variants: { type: [variantSchema], default: [] },
 
+    // Only meaningful for a product with no variants; see the interface note.
+    stock: {
+      available: { type: Number, required: true, default: 0, min: 0 },
+      reserved: { type: Number, required: true, default: 0, min: 0 },
+      sold: { type: Number, required: true, default: 0, min: 0 },
+      lowStockThreshold: { type: Number, default: 5, min: 0 },
+    },
+
     attributes: {
       type: [
         { _id: false, k: { type: String, required: true }, v: { type: String, required: true } },
@@ -316,8 +337,9 @@ productSchema.index({ status: 1, 'attributes.k': 1, 'attributes.v': 1 });
 productSchema.index({ status: 1, isFeatured: 1, createdAt: -1 });
 // Variant SKU lookups and uniqueness. Sparse because drafts may have no variants.
 productSchema.index({ 'variants.sku': 1 }, { unique: true, sparse: true });
-// Admin low-stock report.
+// Admin low-stock report, for both variant and simple products.
 productSchema.index({ status: 1, 'variants.stock.available': 1 });
+productSchema.index({ status: 1, 'stock.available': 1 });
 // Soft-delete filtering.
 productSchema.index({ deletedAt: 1 });
 
@@ -362,6 +384,9 @@ productSchema.pre('save', function recomputeRollups() {
       this.compareAtPrice && this.compareAtPrice > this.price
         ? Math.round(((this.compareAtPrice - this.price) / this.compareAtPrice) * 100)
         : 0;
+    // `totalStock` stays the single field every listing query filters on,
+    // whichever level actually holds the stock.
+    this.totalStock = this.stock?.available ?? 0;
   }
 
   this.inStock = this.totalStock > 0;

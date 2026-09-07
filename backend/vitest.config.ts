@@ -16,9 +16,7 @@ export default defineConfig({
      * a slow election surfaces as an unrelated assertion mismatch — and it
      * saturates the machine for very little wall-clock gain.
      */
-    poolOptions: {
-      threads: { maxThreads: 4, minThreads: 1 },
-    },
+    maxWorkers: 4,
     setupFiles: ['./tests/helpers/setup.ts'],
     include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
     testTimeout: 30_000,

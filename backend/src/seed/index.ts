@@ -184,10 +184,16 @@ async function seedCatalog(
       },
     });
 
-    // Products without variants carry their stock at the product level; the
-    // rollup hook needs `totalStock` set for `inStock` to be correct.
+    // Products without variants carry their stock at the product level. The
+    // pre-save hook derives `totalStock` from it, so the listing filters and
+    // the reservation logic read the same number.
     if (!variants.length && seed.stock !== undefined) {
-      product.totalStock = seed.stock;
+      product.stock = {
+        available: seed.stock,
+        reserved: 0,
+        sold: Math.floor(Math.random() * 30),
+        lowStockThreshold: 5,
+      };
     }
 
     await product.save();

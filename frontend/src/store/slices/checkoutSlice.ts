@@ -14,7 +14,7 @@ import type { DeliveryMethod } from '@ecom/shared';
  * TanStack Query. Caching a total in the store would be inventing a second
  * source of truth for money.
  */
-export const CHECKOUT_STEPS = ['contact', 'address', 'delivery', 'review'] as const;
+export const CHECKOUT_STEPS = ['contact', 'address', 'delivery', 'review', 'payment'] as const;
 export type CheckoutStep = (typeof CHECKOUT_STEPS)[number];
 
 export interface CheckoutState {

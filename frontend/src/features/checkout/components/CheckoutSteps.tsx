@@ -7,6 +7,7 @@ const STEP_LABELS: Record<CheckoutStep, string> = {
   address: 'Delivery address',
   delivery: 'Delivery speed',
   review: 'Review',
+  payment: 'Payment',
 };
 
 interface CheckoutStepsProps {

@@ -5,6 +5,9 @@ import catalogRoutes from './catalog.route.js';
 import cartRoutes from './cart.route.js';
 import checkoutRoutes from './checkout.route.js';
 import accountRoutes from './account.route.js';
+import ordersRoutes from './orders.route.js';
+import paymentRoutes from './payment.route.js';
+import webhookRoutes from './webhook.route.js';
 import adminRoutes from './admin/index.js';
 
 /**
@@ -23,6 +26,15 @@ router.use('/', catalogRoutes);
 router.use('/cart', cartRoutes);
 router.use('/checkout', checkoutRoutes);
 router.use('/account', accountRoutes);
+
+// Each router is mounted at its OWN prefix. Nothing that applies `requireAuth`
+// router-wide may be mounted at '/', or its guard would run for every sibling
+// path — including the webhooks below, which have no session by design.
+router.use('/orders', ordersRoutes);
+router.use('/payments', paymentRoutes);
+
+// Webhooks carry no cookies and are authenticated by HMAC; see webhook.route.ts.
+router.use('/webhooks', webhookRoutes);
 
 router.use('/admin', adminRoutes);
 

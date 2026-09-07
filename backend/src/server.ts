@@ -6,6 +6,8 @@ import { connectDatabase, disconnectDatabase } from './config/db.js';
 import { storage } from './integrations/storage/index.js';
 import { cache } from './integrations/cache/index.js';
 import { registerNotificationHandlers } from './events/handlers/notification.handlers.js';
+import { registerOrderHandlers } from './events/handlers/order.handlers.js';
+import { startJobs, stopJobs } from './jobs/runner.js';
 // Imported for its side effect: every Mongoose model must be registered before
 // any query runs `populate()`, which throws MissingSchemaError otherwise.
 import './models/index.js';
@@ -37,6 +39,11 @@ async function bootstrap(): Promise<void> {
   // Subscribe domain-event handlers before the server accepts traffic, so no
   // event emitted by an early request is dropped.
   registerNotificationHandlers();
+  registerOrderHandlers();
+
+  // Sweeps stock reservations whose checkout was abandoned. Without it, an
+  // unpaid order holds inventory forever.
+  startJobs();
 
   const app = createApp();
 
@@ -78,6 +85,7 @@ async function shutdown(signal: string): Promise<void> {
       logger.info('HTTP server closed');
     }
 
+    stopJobs();
     await Promise.allSettled([disconnectDatabase(), cache.disconnect()]);
 
     clearTimeout(forceExit);

@@ -130,7 +130,12 @@ export async function makeProduct(overrides: ProductOverrides = {}) {
   });
 
   if (!variants.length && overrides.stock !== undefined) {
-    product.totalStock = overrides.stock;
+    product.stock = {
+      available: overrides.stock,
+      reserved: 0,
+      sold: 0,
+      lowStockThreshold: 5,
+    };
   }
 
   await product.save();

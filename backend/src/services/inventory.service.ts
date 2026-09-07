@@ -142,7 +142,7 @@ export async function commitReservation(
   const reservation = await StockReservation.findOneAndUpdate(
     { order: orderId, status: 'held' },
     { $set: { status: 'committed', committedAt: new Date() } },
-    { session, new: true },
+    { session, returnDocument: 'after' },
   );
 
   // Already committed by the other confirmation path. Not an error.
@@ -194,7 +194,7 @@ export async function releaseReservation(
   const reservation = await StockReservation.findOneAndUpdate(
     { order: orderId, status: 'held' },
     { $set: { status: reason, releasedAt: new Date() } },
-    { session, new: true },
+    { session, returnDocument: 'after' },
   );
 
   if (!reservation) return false;

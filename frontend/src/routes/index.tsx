@@ -4,9 +4,10 @@ import { RootLayout } from '@/layouts/RootLayout';
 import { StoreLayout } from '@/layouts/StoreLayout';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { AccountLayout } from '@/layouts/AccountLayout';
+import { AdminLayout } from '@/layouts/AdminLayout';
 import { RouteError } from '@/components/common/RouteError';
 import { PageLoader } from '@/components/common/PageLoader';
-import { RequireAuth, RequireGuest } from './guards';
+import { RequireAuth, RequireGuest, RequireRole } from './guards';
 
 /**
  * Route-level code splitting.
@@ -34,6 +35,17 @@ const VerifyEmailPage = lazy(() => import('@/features/auth/VerifyEmailPage'));
 const AccountOverviewPage = lazy(() => import('@/features/account/AccountOverviewPage'));
 const AddressesPage = lazy(() => import('@/features/account/AddressesPage'));
 const WishlistPage = lazy(() => import('@/features/wishlist/WishlistPage'));
+
+// The admin subtree is lazily imported as its own chunk group: a customer who
+// never signs in as staff downloads none of it, including recharts.
+const DashboardPage = lazy(() => import('@/features/admin/pages/DashboardPage'));
+const AdminOrdersPage = lazy(() => import('@/features/admin/pages/AdminOrdersPage'));
+const AdminOrderDetailPage = lazy(() => import('@/features/admin/pages/AdminOrderDetailPage'));
+const AdminProductsPage = lazy(() => import('@/features/admin/pages/AdminProductsPage'));
+const AdminInventoryPage = lazy(() => import('@/features/admin/pages/AdminInventoryPage'));
+const AdminCustomersPage = lazy(() => import('@/features/admin/pages/AdminCustomersPage'));
+const AdminReviewsPage = lazy(() => import('@/features/admin/pages/AdminReviewsPage'));
+const AdminCouponsPage = lazy(() => import('@/features/admin/pages/AdminCouponsPage'));
 
 const NotFoundPage = lazy(() => import('@/features/misc/NotFoundPage'));
 
@@ -82,6 +94,35 @@ export const router = createBrowserRouter([
             element: <RequireAuth>{page(<OrderConfirmationPage />)}</RequireAuth>,
           },
 
+          { path: '*', element: page(<NotFoundPage />) },
+        ],
+      },
+
+      // ── Admin ─────────────────────────────────────────────────────────────
+      // Mounted as a sibling of StoreLayout, not inside it: the admin area has
+      // its own chrome and must not inherit the storefront header, footer or
+      // cart drawer.
+      //
+      // RequireRole is UX only. Every route these pages call is independently
+      // authorized on the server, and an integration test asserts a 403 on all
+      // 46 of them for a customer token — so bypassing this guard in devtools
+      // reveals an empty shell, not data.
+      {
+        path: 'admin',
+        element: (
+          <RequireRole roles={['support', 'manager', 'admin']}>
+            <AdminLayout />
+          </RequireRole>
+        ),
+        children: [
+          { index: true, element: page(<DashboardPage />) },
+          { path: 'orders', element: page(<AdminOrdersPage />) },
+          { path: 'orders/:id', element: page(<AdminOrderDetailPage />) },
+          { path: 'products', element: page(<AdminProductsPage />) },
+          { path: 'inventory', element: page(<AdminInventoryPage />) },
+          { path: 'customers', element: page(<AdminCustomersPage />) },
+          { path: 'reviews', element: page(<AdminReviewsPage />) },
+          { path: 'coupons', element: page(<AdminCouponsPage />) },
           { path: '*', element: page(<NotFoundPage />) },
         ],
       },

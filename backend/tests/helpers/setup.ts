@@ -1,4 +1,4 @@
-import { beforeAll } from 'vitest';
+import { afterAll, beforeAll } from 'vitest';
 
 /**
  * Global test bootstrap.
@@ -27,4 +27,11 @@ process.env.REDIS_URL = '';
 
 beforeAll(() => {
   // Placeholder for future global fixtures; per-suite DB setup lives in db.ts.
+});
+
+// Release the HTTP servers the API helper opened, so a test file does not leave
+// a listening handle behind and stall the worker's exit.
+afterAll(async () => {
+  const { closeTestServers } = await import('./api.js');
+  await closeTestServers();
 });

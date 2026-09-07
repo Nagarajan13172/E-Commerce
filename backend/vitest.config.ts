@@ -15,6 +15,11 @@ export default defineConfig({
      * simultaneously. That is a well-known source of intermittent failures —
      * a slow election surfaces as an unrelated assertion mismatch — and it
      * saturates the machine for very little wall-clock gain.
+     *
+     * Four, not two: dropping to two costs ~60% more wall-clock time (31s vs
+     * 18s) for no correctness gain. The intermittent failures that once looked
+     * like a parallelism problem were in fact supertest recycling ephemeral
+     * ports under a keep-alive pool — fixed in tests/helpers/api.ts.
      */
     maxWorkers: 4,
     setupFiles: ['./tests/helpers/setup.ts'],

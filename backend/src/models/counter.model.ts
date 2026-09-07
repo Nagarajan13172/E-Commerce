@@ -34,7 +34,7 @@ export async function nextSequence(
   const doc = await Counter.findByIdAndUpdate(
     name,
     { $inc: { seq: 1 } },
-    { new: true, upsert: true, ...(session ?? {}) },
+    { returnDocument: 'after', upsert: true, ...(session ?? {}) },
   ).lean();
   return doc?.seq ?? 1;
 }

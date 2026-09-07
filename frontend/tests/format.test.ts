@@ -7,9 +7,12 @@ describe('formatCurrency', () => {
     expect(formatCurrency(125000)).toBe('₹1,25,000');
   });
 
-  it('drops trailing zeros but keeps real paise', () => {
+  it('shows two decimal places or none — never one', () => {
     expect(formatCurrency(499)).toBe('₹499');
-    expect(formatCurrency(499.5)).toBe('₹499.5');
+    // Regression: this used to render "₹499.5". The admin dashboard's average
+    // order value made it obvious — no currency is written with one decimal.
+    expect(formatCurrency(499.5)).toBe('₹499.50');
+    expect(formatCurrency(499.55)).toBe('₹499.55');
   });
 });
 

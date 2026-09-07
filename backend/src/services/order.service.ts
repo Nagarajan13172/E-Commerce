@@ -294,7 +294,7 @@ export async function confirmPayment(params: {
             verifiedAt: new Date(),
           },
         },
-        { session, new: true },
+        { session, returnDocument: 'after' },
       );
 
       if (!claimed) {
@@ -368,7 +368,7 @@ export async function failPayment(params: {
       const payment = await Payment.findOneAndUpdate(
         { providerOrderId: params.providerOrderId, status: { $nin: ['paid', 'failed'] } },
         { $set: { status: 'failed', failureReason: params.reason } },
-        { session, new: true },
+        { session, returnDocument: 'after' },
       );
       if (!payment) return;
 

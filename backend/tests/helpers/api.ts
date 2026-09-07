@@ -1,7 +1,51 @@
+import http from 'node:http';
 import request from 'supertest';
 import type { Express } from 'express';
 
 export const PREFIX = '/api/v1';
+
+/**
+ * One listening server per app, for the lifetime of the test file.
+ *
+ * Handed a bare Express app, supertest calls `app.listen(0)` for EVERY request
+ * and closes it afterwards. Superagent's agent keeps a keep-alive pool keyed by
+ * host:port, so when the OS eventually recycles an ephemeral port onto a new
+ * server, a pooled socket from the previous occupant gets reused — and the
+ * reply arrives as `Parse Error: Expected HTTP/, RTSP/ or ICE/`. That is the
+ * intermittent failure this suite had been seeing: never the same test twice,
+ * never reproducible on retry, and always in the files that fire the most
+ * requests through one agent.
+ *
+ * Given a server that is ALREADY listening, supertest reuses it, so the port
+ * stays fixed for the whole file and there is nothing to recycle.
+ */
+const servers = new WeakMap<Express, http.Server>();
+const open = new Set<http.Server>();
+
+function listeningServer(app: Express): http.Server {
+  const existing = servers.get(app);
+  if (existing) return existing;
+
+  const server = http.createServer(app);
+  server.listen(0);
+  servers.set(app, server);
+  open.add(server);
+  return server;
+}
+
+/** Closes every server this file opened. Called from the global test teardown. */
+export async function closeTestServers(): Promise<void> {
+  await Promise.all(
+    [...open].map(
+      (server) =>
+        new Promise<void>((resolve) => {
+          open.delete(server);
+          server.closeAllConnections();
+          server.close(() => resolve());
+        }),
+    ),
+  );
+}
 
 /**
  * A supertest agent that keeps cookies AND handles CSRF the way the browser does.
@@ -11,7 +55,7 @@ export const PREFIX = '/api/v1';
  * disabling it, so a regression there would actually fail a test.
  */
 export async function createApiAgent(app: Express) {
-  const agent = request.agent(app);
+  const agent = request.agent(listeningServer(app));
 
   const seed = await agent.get(`${PREFIX}/health`);
   const cookies = (seed.headers['set-cookie'] as unknown as string[] | undefined) ?? [];

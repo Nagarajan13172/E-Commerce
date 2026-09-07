@@ -7,15 +7,24 @@
 
 const currencyFormatters = new Map<string, Intl.NumberFormat>();
 
-function getCurrencyFormatter(currency: string, locale: string): Intl.NumberFormat {
-  const key = `${locale}:${currency}`;
+/**
+ * Decimals are all-or-nothing: two, or none.
+ *
+ * A single `minimumFractionDigits: 0` / `maximumFractionDigits: 2` formatter
+ * renders a whole ₹38,997 correctly but turns an average order value of
+ * 19498.5 into "₹19,498.5" — one decimal place, which no currency uses. So the
+ * count is chosen per value: whole amounts stay clean (the storefront shows a
+ * lot of round prices), and anything with a fraction gets the full two.
+ */
+function getCurrencyFormatter(currency: string, locale: string, digits: 0 | 2): Intl.NumberFormat {
+  const key = `${locale}:${currency}:${digits}`;
   let formatter = currencyFormatters.get(key);
   if (!formatter) {
     formatter = new Intl.NumberFormat(locale, {
       style: 'currency',
       currency,
-      maximumFractionDigits: 2,
-      minimumFractionDigits: 0,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
     });
     currencyFormatters.set(key, formatter);
   }
@@ -23,7 +32,7 @@ function getCurrencyFormatter(currency: string, locale: string): Intl.NumberForm
 }
 
 export function formatCurrency(amount: number, currency = 'INR', locale = 'en-IN'): string {
-  return getCurrencyFormatter(currency, locale).format(amount);
+  return getCurrencyFormatter(currency, locale, Number.isInteger(amount) ? 0 : 2).format(amount);
 }
 
 /** A price range, collapsing to a single value when both ends match. */

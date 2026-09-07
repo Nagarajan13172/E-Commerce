@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import catalogAdminRoutes from './catalog.admin.route.js';
+import operationsAdminRoutes from './operations.admin.route.js';
 import { requireAuth } from '../../../middleware/auth.js';
 import { requireStaff } from '../../../middleware/rbac.js';
 
@@ -17,5 +18,6 @@ router.use(requireAuth);
 router.use(requireStaff);
 
 router.use('/', catalogAdminRoutes);
+router.use('/', operationsAdminRoutes);
 
 export default router;

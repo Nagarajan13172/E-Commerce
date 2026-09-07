@@ -43,6 +43,14 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
     return next(AppError.unauthenticated('Your account no longer exists'));
   }
 
+  // Status is checked BEFORE tokenVersion. Suspending an account also bumps
+  // the version, so checking the version first would answer "your session
+  // expired" — technically true, but it sends the customer round a sign-in
+  // loop before they learn the real reason. Both reject; this one explains.
+  if (user.status !== 'active') {
+    return next(AppError.forbidden('This account has been disabled', ERROR_CODES.ACCOUNT_DISABLED));
+  }
+
   // Password changed, role changed, or session revoked since this token was
   // issued — the claim is stale and the token must not be honoured.
   if (user.tokenVersion !== claims.tv) {
@@ -52,10 +60,6 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
         ERROR_CODES.TOKEN_INVALID,
       ),
     );
-  }
-
-  if (user.status !== 'active') {
-    return next(AppError.forbidden('This account has been disabled', ERROR_CODES.ACCOUNT_DISABLED));
   }
 
   req.user = {

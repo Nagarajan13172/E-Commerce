@@ -244,7 +244,7 @@ export const updateProfile: RequestHandler = async (req, res) => {
         ...(input.marketingOptIn !== undefined ? { marketingOptIn: input.marketingOptIn } : {}),
       },
     },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   );
 
   if (!user) throw AppError.notFound('Account');

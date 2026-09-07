@@ -26,8 +26,8 @@ decision in the codebase:
 | 4     | Storefront: home, listing, PDP, search, account, wishlist, cart     | ✅ Complete |
 | 5     | Coupons, pricing service, multi-step checkout                       | ✅ Complete |
 | 6     | Orders, payments, inventory reservation, notifications              | ✅ Complete |
-| 7     | Admin panel and analytics                                           | ⏳ Next     |
-| 8     | Testing, security, performance and accessibility hardening          | —           |
+| 7     | Admin panel and analytics                                           | ✅ Complete |
+| 8     | Testing, security, performance and accessibility hardening          | ⏳ Next     |
 
 Cart was pulled forward from Phase 5 into Phase 4 — a storefront you can browse but
 cannot add to is not a coherent checkpoint. Phase 5 is therefore coupons, the pricing
@@ -327,6 +327,52 @@ one exists. A non-secret `has_session` cookie says so, and the axios interceptor
 attempts a token refresh when it is present. Without it, every anonymous page load
 fired a guaranteed-to-fail `POST /auth/refresh` — two wasted round trips on the most
 common kind of visit.
+
+---
+
+## Admin panel
+
+`/admin` is a lazily-loaded route subtree behind a role guard. Customers never download
+it — the dashboard chunk alone (recharts) is ~100 kB gzipped, which no shopper should
+pay for.
+
+**The guard is UX, not security.** Every route the admin pages call is authorized
+independently on the server, and `tests/integration/adminAuthz.test.ts` asserts a 403
+for a customer token on all 46 of them, plus the correct 403 for a `support` account on
+every route it must not reach. Bypassing the client guard in devtools yields an empty
+shell, not data.
+
+Navigation is filtered by **permission**, not role, so `support` sees Orders, Products,
+Inventory, Customers and Reviews but not the dashboard or coupons — the same matrix the
+server enforces, read from `/auth/me`.
+
+### Analytics
+
+Every figure is computed in MongoDB, never by loading orders into Node. Two rules govern
+what the numbers mean:
+
+- **Only realised revenue counts.** An order in `pending_payment` has taken no money;
+  counting it would flatter every abandoned checkout. Refunds are subtracted, so revenue
+  is what the business kept.
+- **Each metric carries the preceding window of equal length.** "₹2.4L" says little;
+  "₹2.4L, up 12%" says whether the week went well. A zero baseline reports _no_ change
+  rather than +∞%.
+
+Two subtleties worth knowing, both of which shipped as bugs and are now regression-tested:
+
+- The daily series is bucketed by **local** calendar day on both sides. Grouping with an
+  unqualified `$dateToString` (which is UTC) while deriving the window from local
+  midnights put every order in the wrong bucket and dropped today's entirely — the chart
+  read as a flat zero line beneath a summary showing real revenue.
+- The category mix attributes a sale to the product's **first** category, rolled up to
+  the top of its tree. Unwinding every category a product belongs to double-counts its
+  line total, and the pie would then exceed the revenue printed directly above it.
+
+### Guards that mirror the server
+
+Where the server refuses something, the UI hides the control rather than letting an
+admin discover the rule by triggering an error: you cannot change your own role or
+status, and the last remaining admin cannot be demoted or disabled.
 
 ---
 

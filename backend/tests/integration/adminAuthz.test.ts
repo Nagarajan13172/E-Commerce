@@ -58,6 +58,71 @@ const ADMIN_ROUTES: RouteCase[] = [
   { method: 'post', path: '/admin/media/presign', allowed: ['manager', 'admin'] },
   { method: 'post', path: '/admin/media/confirm', allowed: ['manager', 'admin'] },
   { method: 'delete', path: `/admin/media/${OBJECT_ID}`, allowed: ['manager', 'admin'] },
+
+  // ── Dashboard and analytics ───────────────────────────────────────────────
+  // Revenue figures are management information, not something support needs.
+  { method: 'get', path: '/admin/dashboard', allowed: ['manager', 'admin'] },
+
+  // ── Orders ────────────────────────────────────────────────────────────────
+  { method: 'get', path: '/admin/orders', allowed: ['support', 'manager', 'admin'] },
+  { method: 'get', path: `/admin/orders/${OBJECT_ID}`, allowed: ['support', 'manager', 'admin'] },
+  { method: 'patch', path: `/admin/orders/${OBJECT_ID}/status`, allowed: ['manager', 'admin'] },
+  { method: 'patch', path: `/admin/orders/${OBJECT_ID}/shipping`, allowed: ['manager', 'admin'] },
+  // Refunds move money — deliberately out of reach for support.
+  { method: 'post', path: `/admin/orders/${OBJECT_ID}/refund`, allowed: ['manager', 'admin'] },
+  { method: 'get', path: `/admin/orders/${OBJECT_ID}/refundable`, allowed: ['manager', 'admin'] },
+  {
+    method: 'post',
+    path: `/admin/orders/${OBJECT_ID}/notes`,
+    allowed: ['support', 'manager', 'admin'],
+  },
+
+  // ── Customers ─────────────────────────────────────────────────────────────
+  { method: 'get', path: '/admin/customers', allowed: ['support', 'manager', 'admin'] },
+  {
+    method: 'get',
+    path: `/admin/customers/${OBJECT_ID}`,
+    allowed: ['support', 'manager', 'admin'],
+  },
+  { method: 'patch', path: `/admin/customers/${OBJECT_ID}/status`, allowed: ['manager', 'admin'] },
+  // Granting roles is privilege escalation — admin only.
+  { method: 'patch', path: `/admin/customers/${OBJECT_ID}/role`, allowed: ['admin'] },
+
+  // ── Inventory ─────────────────────────────────────────────────────────────
+  { method: 'get', path: '/admin/inventory', allowed: ['support', 'manager', 'admin'] },
+  { method: 'post', path: '/admin/inventory/adjust', allowed: ['manager', 'admin'] },
+  {
+    method: 'get',
+    path: `/admin/inventory/${OBJECT_ID}/history`,
+    allowed: ['support', 'manager', 'admin'],
+  },
+
+  // ── Reviews ───────────────────────────────────────────────────────────────
+  { method: 'get', path: '/admin/reviews', allowed: ['support', 'manager', 'admin'] },
+  {
+    method: 'patch',
+    path: `/admin/reviews/${OBJECT_ID}/moderate`,
+    allowed: ['support', 'manager', 'admin'],
+  },
+  {
+    method: 'post',
+    path: `/admin/reviews/${OBJECT_ID}/respond`,
+    allowed: ['support', 'manager', 'admin'],
+  },
+  {
+    method: 'delete',
+    path: `/admin/reviews/${OBJECT_ID}`,
+    allowed: ['support', 'manager', 'admin'],
+  },
+
+  // ── Coupons ───────────────────────────────────────────────────────────────
+  { method: 'get', path: '/admin/coupons', allowed: ['manager', 'admin'] },
+  { method: 'post', path: '/admin/coupons', allowed: ['manager', 'admin'] },
+  { method: 'patch', path: `/admin/coupons/${OBJECT_ID}`, allowed: ['manager', 'admin'] },
+  { method: 'delete', path: `/admin/coupons/${OBJECT_ID}`, allowed: ['manager', 'admin'] },
+
+  // ── Payments ──────────────────────────────────────────────────────────────
+  { method: 'get', path: '/admin/payments', allowed: ['manager', 'admin'] },
 ];
 
 async function signIn(role: UserRole): Promise<ApiAgent> {

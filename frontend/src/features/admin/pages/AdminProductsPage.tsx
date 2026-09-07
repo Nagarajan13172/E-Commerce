@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { ExternalLink, Package, Search } from 'lucide-react';
+import { ExternalLink, Package, Pencil, Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -182,18 +182,26 @@ export default function AdminProductsPage() {
       ),
     },
     {
-      key: 'view',
+      key: 'actions',
       header: '',
       className: 'text-right',
       render: (product) => (
-        <Button asChild variant="ghost" size="sm">
-          {/* Opens the storefront page so an admin can check the customer-facing
-              result rather than trusting the row. */}
-          <Link to={`/products/${product.slug}`} target="_blank" rel="noreferrer">
-            <ExternalLink className="size-4" aria-hidden="true" />
-            <span className="sr-only">View {product.name} on the storefront</span>
-          </Link>
-        </Button>
+        <div className="flex items-center justify-end gap-0.5">
+          <Button asChild variant="ghost" size="sm">
+            <Link to={`/admin/products/${product._id}/edit`}>
+              <Pencil className="size-4" aria-hidden="true" />
+              <span className="sr-only">Edit {product.name}</span>
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            {/* Opens the storefront page so an admin can check the
+                customer-facing result rather than trusting the row. */}
+            <Link to={`/products/${product.slug}`} target="_blank" rel="noreferrer">
+              <ExternalLink className="size-4" aria-hidden="true" />
+              <span className="sr-only">View {product.name} on the storefront</span>
+            </Link>
+          </Button>
+        </div>
       ),
     },
   ];
@@ -202,12 +210,22 @@ export default function AdminProductsPage() {
     <>
       <Seo title="Products — Admin" noIndex />
 
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight">Products</h1>
-      <p className="text-muted-foreground mb-6 text-sm tabular">
-        {isPending
-          ? 'Loading…'
-          : `${data?.meta.total ?? 0} product${data?.meta.total === 1 ? '' : 's'}`}
-      </p>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Products</h1>
+          <p className="text-muted-foreground mt-1 text-sm tabular">
+            {isPending
+              ? 'Loading…'
+              : `${data?.meta.total ?? 0} product${data?.meta.total === 1 ? '' : 's'}`}
+          </p>
+        </div>
+        <Button asChild>
+          <Link to="/admin/products/new">
+            <Plus className="size-4" aria-hidden="true" />
+            New product
+          </Link>
+        </Button>
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1">

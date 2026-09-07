@@ -16,11 +16,31 @@ import { ACCOUNTS, signIn, STATE_FILES } from './helpers';
  * inspected from the file. Weakening the limit for tests would remove exactly
  * the protection worth having.
  */
-async function sessionStillValid(
+/**
+ * How old a saved session may be before it is thrown away.
+ *
+ * Well under the 15-minute access-token lifetime, and that margin is the whole
+ * point. Refresh tokens rotate on every use and a reused one revokes the entire
+ * family — correct, deliberate security behaviour. But every browser context in
+ * a run starts from the *same* saved snapshot, so if the access token expires
+ * mid-run the first context to refresh rotates the token and every later
+ * context presents one that has already been spent. Reuse detection then fires
+ * and signs all of them out at once: an entire project's tests fail together,
+ * looking for all the world like the pages are broken.
+ *
+ * Keeping the snapshot young means no context ever needs to refresh, so the
+ * situation never arises. Five minutes still costs at most one sign-in per role
+ * per five minutes, comfortably inside `authLimiter`.
+ */
+const MAX_SESSION_AGE_MS = 5 * 60 * 1000;
+
+async function reusableSession(
   request: import('@playwright/test').APIRequestContext,
   statePath: string,
 ): Promise<boolean> {
   if (!fs.existsSync(statePath)) return false;
+  if (Date.now() - fs.statSync(statePath).mtimeMs > MAX_SESSION_AGE_MS) return false;
+
   try {
     const response = await request.get('http://localhost:4000/api/v1/auth/me');
     return response.ok();
@@ -35,7 +55,7 @@ for (const [role, account] of Object.entries(ACCOUNTS)) {
   setup(`authenticate as ${role}`, async ({ browser }) => {
     if (fs.existsSync(statePath)) {
       const context = await browser.newContext({ storageState: statePath });
-      const valid = await sessionStillValid(context.request, statePath);
+      const valid = await reusableSession(context.request, statePath);
       await context.close();
       if (valid) {
         setup.info().annotations.push({ type: 'reused', description: `${role} session` });

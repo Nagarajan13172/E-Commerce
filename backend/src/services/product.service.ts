@@ -240,6 +240,35 @@ export async function updateProduct(
     product.brand = (input.brand || undefined) as never;
   }
 
+  // Variants are merged, never replaced wholesale.
+  //
+  // `reserved` and `sold` are derived from checkout activity and are not part
+  // of the update schema, so assigning the incoming array directly let Mongoose
+  // refill them from their schema defaults — silently zeroing both. Zeroing
+  // `sold` loses history; zeroing `reserved` is far worse, because units held
+  // for an in-flight checkout become invisible and can be sold a second time.
+  // Editing a product's name must never be able to cause an oversell.
+  if (input.variants) {
+    const existing = new Map(product.variants.map((v) => [String(v._id), v]));
+
+    input.variants = input.variants.map((incoming) => {
+      const current = incoming._id ? existing.get(String(incoming._id)) : undefined;
+      if (!current) return incoming;
+
+      return {
+        ...incoming,
+        stock: {
+          // `available` and the threshold are the admin's to set; the other two
+          // belong to the reservation system alone.
+          available: incoming.stock?.available ?? current.stock.available,
+          lowStockThreshold: incoming.stock?.lowStockThreshold ?? current.stock.lowStockThreshold,
+          reserved: current.stock.reserved,
+          sold: current.stock.sold,
+        },
+      } as typeof incoming;
+    });
+  }
+
   for (const [key, value] of Object.entries(input)) {
     if (key === 'brand' || value === undefined) continue;
     (product as unknown as Record<string, unknown>)[key] = value;

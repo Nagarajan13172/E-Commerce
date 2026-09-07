@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { STATE_FILES } from './helpers';
+import { STATE_FILES, pageReady } from './helpers';
 
 /**
  * Admin journeys, signed in as an administrator via stored state.
@@ -13,7 +13,7 @@ import { STATE_FILES } from './helpers';
 
 test('the dashboard reports figures rather than an empty shell', async ({ page }) => {
   await page.goto('/admin');
-  await page.waitForLoadState('networkidle');
+  await pageReady(page);
 
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
   // Exact, because "Revenue over time" and "Revenue by category" are also on
@@ -26,7 +26,7 @@ test('the dashboard reports figures rather than an empty shell', async ({ page }
 
 test('an order can be opened from the list', async ({ page }) => {
   await page.goto('/admin/orders');
-  await page.waitForLoadState('networkidle');
+  await pageReady(page);
 
   const rows = page.locator('tbody tr');
   await expect(rows.first()).toBeVisible();
@@ -38,7 +38,7 @@ test('an order can be opened from the list', async ({ page }) => {
 
 test('products can be selected for a bulk action', async ({ page }) => {
   await page.goto('/admin/products');
-  await page.waitForLoadState('networkidle');
+  await pageReady(page);
 
   await page.locator('tbody tr').first().locator('button[role=checkbox]').click();
   await expect(page.getByText('1 selected')).toBeVisible();
@@ -47,7 +47,7 @@ test('products can be selected for a bulk action', async ({ page }) => {
 
 test('a percentage coupon is refused without a ceiling', async ({ page }) => {
   await page.goto('/admin/coupons');
-  await page.waitForLoadState('networkidle');
+  await pageReady(page);
 
   await page.getByRole('button', { name: 'New coupon' }).click();
   await page.locator('#code').fill(`E2E${Date.now().toString().slice(-6)}`);
@@ -63,7 +63,7 @@ test('staff see only the sections their permissions allow', async ({ browser }) 
   const context = await browser.newContext({ storageState: STATE_FILES.support });
   const page = await context.newPage();
   await page.goto('/admin/orders');
-  await page.waitForLoadState('networkidle');
+  await pageReady(page);
 
   const nav = page.locator('nav').first();
   await expect(nav.getByRole('link', { name: 'Orders' })).toBeVisible();

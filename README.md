@@ -376,6 +376,32 @@ Two subtleties worth knowing, both of which shipped as bugs and are now regressi
   the top of its tree. Unwinding every category a product belongs to double-counts its
   line total, and the pie would then exceed the revenue printed directly above it.
 
+### Product editing
+
+`/admin/products/new` and `/admin/products/:id/edit` are one form behind five tabs —
+General, Media, Pricing, Variants, SEO — rather than a wizard, because an admin changing
+a price should not have to walk through media and SEO to reach it. Validation is the
+shared `createProductSchema`, so a rule like "compare-at must be at least the selling
+price" is written once and enforced identically on both sides.
+
+Images upload **straight to object storage** with a presigned PUT; the bytes never pass
+through the API. Three round trips per file: ask for a URL, PUT to storage, then confirm
+so the server can read the file's magic bytes. That third step is not a formality — a
+renamed `.exe` passes every client-side check, and confirm deletes the object and
+returns 400 when the bytes disagree with the declared type.
+
+Two things the form deliberately does not let you do. Stock for an **existing** variant
+is read-only here: adjustments go through Inventory, which writes a ledger entry and
+keeps `reserved` consistent. And `reserved` and `sold` are never sent at all, because
+they are derived from checkout activity.
+
+That second point started as a real bug, and a bad one. `updateProduct` assigned the
+incoming variants array straight onto the document, so Mongoose refilled `reserved` and
+`sold` from their schema defaults — renaming a product silently zeroed both. Losing
+`sold` costs history; losing `reserved` frees units that an in-flight checkout is
+holding, and they can then be sold twice. Variants are now merged by `_id`, with those
+two fields taken from the stored document and never from the request.
+
 ### Guards that mirror the server
 
 Where the server refuses something, the UI hides the control rather than letting an
@@ -435,15 +461,22 @@ than waiting on three resizes.
 ```bash
 pnpm test           # backend + frontend unit and integration suites
 pnpm test:backend   # 331 tests: services, routes, authorization, security, indexes
-pnpm test:e2e       # 26 Playwright tests: journeys, accessibility, responsiveness
+pnpm test:e2e       # 31 Playwright tests: journeys, accessibility, responsiveness
 ```
 
 `pnpm test` is safe to run anywhere: it uses an in-memory database and needs no
 infrastructure. `pnpm test:e2e` deliberately does not — it drives a real browser
-against a running stack (`pnpm docker:up && pnpm seed && pnpm dev`), because the bugs
-it exists to catch only appear once the pieces are joined up. Keeping it separate means
-`pnpm test` never fails for want of a Docker daemon, which is the failure mode that
-teaches people to ignore a suite.
+against a running stack (`pnpm docker:up && pnpm seed && pnpm dev:backend`), because the
+bugs it exists to catch only appear once the pieces are joined up. Keeping it separate
+means `pnpm test` never fails for want of a Docker daemon, which is the failure mode
+that teaches people to ignore a suite.
+
+The browser tests build the web app and serve it with `vite preview` rather than running
+against the dev server. Vite compiles a route's modules the first time that route is
+visited, so on `pnpm dev` the first run after any edit pays that inside whichever
+assertion happens to touch each page — enough on the heavier admin screens to blow a
+10-second expectation. The preview server has stable timing, runs the suite in about a
+third of the time, and exercises the bundle that actually ships.
 
 Integration tests run against an in-memory **`MongoMemoryReplSet`**, not a standalone
 server — otherwise the transaction-based inventory logic, which is the single most
@@ -495,10 +528,15 @@ then fails later tests with a 429 that looks like a broken login.
 The same lesson applies more broadly, and cost an hour to learn. A rate-limited write
 does not surface as an error the user sees — the optimistic update simply rolls back, so
 an add-to-basket click appears to do nothing at all. `globalLimiter` and `writeLimiter`
-are therefore raised outside production (3,000 and 600 per minute rather than 300 and
-60), because one developer with hot reload plus a browser suite loading sixty pages
-legitimately exceeds a production ceiling from a single loopback address. They stay in
-the request path, so a runaway loop is still caught.
+are therefore raised outside production, along with `searchLimiter` (3,000 / 600 / 1,200
+per minute rather than 300 / 60 / 120), because one developer with hot reload plus a
+browser suite loading sixty pages legitimately exceeds a production ceiling from a
+single loopback address. They stay in the request path, so a runaway loop is still
+caught.
+
+`searchLimiter` was the last one found, and the symptom was the most misleading of the
+three: the product listing simply rendered empty, which reads as a broken catalogue
+rather than a throttled client.
 
 The auth, email and checkout limiters are **not** relaxed. Their numbers describe what
 abuse looks like rather than what a busy developer looks like, and a test suite has no

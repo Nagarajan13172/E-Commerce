@@ -42,6 +42,7 @@ const DashboardPage = lazy(() => import('@/features/admin/pages/DashboardPage'))
 const AdminOrdersPage = lazy(() => import('@/features/admin/pages/AdminOrdersPage'));
 const AdminOrderDetailPage = lazy(() => import('@/features/admin/pages/AdminOrderDetailPage'));
 const AdminProductsPage = lazy(() => import('@/features/admin/pages/AdminProductsPage'));
+const AdminProductFormPage = lazy(() => import('@/features/admin/pages/AdminProductFormPage'));
 const AdminInventoryPage = lazy(() => import('@/features/admin/pages/AdminInventoryPage'));
 const AdminCustomersPage = lazy(() => import('@/features/admin/pages/AdminCustomersPage'));
 const AdminReviewsPage = lazy(() => import('@/features/admin/pages/AdminReviewsPage'));
@@ -119,6 +120,10 @@ export const router = createBrowserRouter([
           { path: 'orders', element: page(<AdminOrdersPage />) },
           { path: 'orders/:id', element: page(<AdminOrderDetailPage />) },
           { path: 'products', element: page(<AdminProductsPage />) },
+          // `new` before `:id/edit` is not required by the router (the paths do
+          // not overlap), but keeping create above edit matches how they read.
+          { path: 'products/new', element: page(<AdminProductFormPage />) },
+          { path: 'products/:id/edit', element: page(<AdminProductFormPage />) },
           { path: 'inventory', element: page(<AdminInventoryPage />) },
           { path: 'customers', element: page(<AdminCustomersPage />) },
           { path: 'reviews', element: page(<AdminReviewsPage />) },

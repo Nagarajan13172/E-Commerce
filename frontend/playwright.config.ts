@@ -23,7 +23,7 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 10_000 },
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5173',
+    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:4173',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
@@ -50,15 +50,31 @@ export default defineConfig({
     },
     {
       name: 'admin',
-      testMatch: /admin\.spec\.ts/,
+      testMatch: /(admin|product-editor)\.spec\.ts/,
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'], storageState: STATE_FILES.admin },
     },
   ],
+  /**
+   * Serve the production build, not the dev server.
+   *
+   * Vite transforms a route's modules the first time that route is visited, so
+   * against `pnpm dev` the first run after any edit pays compilation inside
+   * whichever assertion happens to touch each page — enough on the heavier
+   * admin screens to blow a 10-second expectation and fail a suite that is
+   * working correctly. Chasing that with longer timeouts only hides genuinely
+   * slow pages too.
+   *
+   * A preview server serves static files, so the timing is stable, the suite
+   * runs in a third of the time, and — the part that actually matters — it
+   * exercises the bundle that ships rather than an unminified dev graph.
+   *
+   * The API still needs to be running separately; only the web app is built.
+   */
   webServer: {
-    command: 'pnpm dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: true,
-    timeout: 60_000,
+    command: 'pnpm build && pnpm exec vite preview --port 4173 --strictPort',
+    url: 'http://localhost:4173',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
   },
 });

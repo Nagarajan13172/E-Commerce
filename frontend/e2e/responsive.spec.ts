@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { STATE_FILES } from './helpers';
+import { STATE_FILES, pageReady } from './helpers';
 
 /**
  * No page may scroll sideways at any supported width.
@@ -18,6 +18,7 @@ const ADMIN = [
   '/admin',
   '/admin/orders',
   '/admin/products',
+  '/admin/products/new',
   '/admin/inventory',
   '/admin/customers',
   '/admin/coupons',
@@ -38,7 +39,7 @@ for (const width of WIDTHS) {
     const page = await context.newPage();
     for (const path of STOREFRONT) {
       await page.goto(path);
-      await page.waitForLoadState('networkidle');
+      await pageReady(page);
       expect(await scrollsSideways(page), `${path} scrolls sideways at ${width}px`).toBe(false);
     }
     await context.close();
@@ -52,7 +53,7 @@ for (const width of WIDTHS) {
     const page = await context.newPage();
     for (const path of ADMIN) {
       await page.goto(path);
-      await page.waitForLoadState('networkidle');
+      await pageReady(page);
       expect(await scrollsSideways(page), `${path} scrolls sideways at ${width}px`).toBe(false);
     }
     await context.close();

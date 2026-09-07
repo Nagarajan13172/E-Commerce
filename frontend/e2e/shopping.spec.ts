@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { pageReady } from './helpers';
 
 /**
  * The journey the whole application exists to serve: browse, filter, choose a
@@ -105,7 +106,7 @@ test('a shopper can buy something and see the order afterwards', async ({ page }
 
 test('signing out returns the shopper to a signed-out storefront', async ({ page }) => {
   await page.goto('/account');
-  await page.waitForLoadState('networkidle');
+  await pageReady(page);
 
   // Sign out lives in the account dropdown, so the menu has to be opened first.
   await page

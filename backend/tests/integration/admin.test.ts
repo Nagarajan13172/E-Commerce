@@ -489,3 +489,136 @@ describe('coupon management', () => {
     expect(list.body.data.items[0].isActive).toBe(false);
   });
 });
+
+describe('product editing', () => {
+  /**
+   * The rule this protects is the one the whole inventory design rests on:
+   * editing a product must never be able to cause an oversell.
+   *
+   * `reserved` and `sold` are derived from checkout activity and are absent
+   * from the update schema by design. Assigning the incoming variants array
+   * straight onto the document therefore let Mongoose refill both from their
+   * schema defaults — so renaming a product silently zeroed them. Losing
+   * `sold` costs history; losing `reserved` frees units that an in-flight
+   * checkout is holding, and they can then be sold twice.
+   */
+  it('keeps reserved and sold when an admin edits a product', async () => {
+    const product = await makeProduct({
+      name: 'Editable Thing',
+      variants: [
+        { color: 'Black', available: 10 },
+        { color: 'White', available: 4 },
+      ],
+    });
+
+    // Put the variants into a realistic mid-life state.
+    product.variants[0]!.stock.reserved = 3;
+    product.variants[0]!.stock.sold = 21;
+    product.variants[1]!.stock.reserved = 1;
+    product.variants[1]!.stock.sold = 7;
+    await product.save();
+
+    const detail = await admin.get(`/admin/products/${String(product._id)}`);
+    expect(detail.status).toBe(200);
+
+    // Exactly what the admin form sends back: available and the threshold, and
+    // nothing else about stock.
+    const variants = detail.body.data.product.variants.map(
+      (variant: {
+        _id: string;
+        sku: string;
+        optionValues: unknown;
+        price: number;
+        stock: { available: number; lowStockThreshold: number };
+      }) => ({
+        _id: variant._id,
+        sku: variant.sku,
+        optionValues: variant.optionValues,
+        price: variant.price,
+        stock: {
+          available: variant.stock.available,
+          lowStockThreshold: variant.stock.lowStockThreshold,
+        },
+        isActive: true,
+      }),
+    );
+
+    const res = await admin.patch(`/admin/products/${String(product._id)}`, {
+      name: 'Renamed Thing',
+      variants,
+    });
+    expect(res.status).toBe(200);
+
+    const after = await Product.findById(product._id).lean();
+    expect(after?.name).toBe('Renamed Thing');
+    expect(after?.variants[0]?.stock.reserved).toBe(3);
+    expect(after?.variants[0]?.stock.sold).toBe(21);
+    expect(after?.variants[1]?.stock.reserved).toBe(1);
+    expect(after?.variants[1]?.stock.sold).toBe(7);
+    // The admin still owns the numbers that are theirs to set.
+    expect(after?.variants[0]?.stock.available).toBe(10);
+  });
+
+  it('still accepts an available adjustment from the product form', async () => {
+    const product = await makeProduct({
+      name: 'Adjustable Thing',
+      variants: [{ color: 'Blue', available: 5 }],
+    });
+    product.variants[0]!.stock.reserved = 2;
+    await product.save();
+
+    const variantId = String(product.variants[0]!._id);
+    const res = await admin.patch(`/admin/products/${String(product._id)}`, {
+      variants: [
+        {
+          _id: variantId,
+          sku: product.variants[0]!.sku,
+          optionValues: product.variants[0]!.optionValues,
+          price: product.variants[0]!.price,
+          stock: { available: 12, lowStockThreshold: 5 },
+          isActive: true,
+        },
+      ],
+    });
+    expect(res.status).toBe(200);
+
+    const after = await Product.findById(product._id).lean();
+    expect(after?.variants[0]?.stock.available).toBe(12);
+    expect(after?.variants[0]?.stock.reserved).toBe(2);
+  });
+
+  it('adds a brand-new variant without an id', async () => {
+    const product = await makeProduct({
+      name: 'Growable Thing',
+      variants: [{ color: 'Red', available: 3 }],
+    });
+
+    const existing = product.variants[0]!;
+    const res = await admin.patch(`/admin/products/${String(product._id)}`, {
+      options: [{ name: 'Color', values: ['Red', 'Green'], position: 0 }],
+      variants: [
+        {
+          _id: String(existing._id),
+          sku: existing.sku,
+          optionValues: existing.optionValues,
+          price: existing.price,
+          stock: { available: 3, lowStockThreshold: 5 },
+          isActive: true,
+        },
+        {
+          sku: 'GROWABLE-GREEN',
+          optionValues: [{ name: 'Color', value: 'Green' }],
+          price: 1500,
+          stock: { available: 8, lowStockThreshold: 5 },
+          isActive: true,
+        },
+      ],
+    });
+    expect(res.status).toBe(200);
+
+    const after = await Product.findById(product._id).lean();
+    expect(after?.variants).toHaveLength(2);
+    expect(after?.variants[1]?.stock.available).toBe(8);
+    expect(after?.variants[1]?.stock.reserved).toBe(0);
+  });
+});

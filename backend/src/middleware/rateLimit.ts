@@ -98,11 +98,21 @@ export const emailLimiter = rateLimit({
   keyGenerator: (req) => `email:${ipKeyGenerator(req.ip ?? '')}`,
 });
 
-/** Search hits the text index; cheap per call but easy to hammer. */
+/**
+ * Search hits the text index; cheap per call but easy to hammer.
+ *
+ * Raised outside production alongside the global and write limiters. The
+ * browser suite loads the listing at five viewport widths, in two themes, plus
+ * the shopping journey — and each of those page loads fetches results and
+ * facets. Compressed into the couple of minutes a suite run takes, that exceeds
+ * 120/minute from one address, and the symptom is thoroughly misleading: the
+ * listing renders empty, so it reads as "the catalogue is broken" rather than
+ * "you asked too quickly".
+ */
 export const searchLimiter = rateLimit({
   ...base,
   windowMs: 60_000,
-  limit: 120,
+  limit: isProduction ? 120 : 1_200,
   store: store(),
 });
 

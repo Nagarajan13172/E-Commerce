@@ -21,13 +21,17 @@ decision in the codebase:
 | Phase | Scope                                                               | State       |
 | ----- | ------------------------------------------------------------------- | ----------- |
 | 1     | Project structure, Docker infra, TS/lint/test toolchain, app shells | ✅ Complete |
-| 2     | Models, auth, RBAC, storage/email integrations                      | ⏳ Next     |
-| 3     | Categories, brands, products, variants, search, seed data           | —           |
-| 4     | Storefront: home, listing, PDP, search, account                     | —           |
-| 5     | Cart, coupons, checkout                                             | —           |
-| 6     | Orders, payments, inventory, notifications                          | —           |
+| 2     | Models, auth, RBAC, storage/email/cache integrations                | ✅ Complete |
+| 3     | Categories, brands, products, variants, search, media, seed data    | ✅ Complete |
+| 4     | Storefront: home, listing, PDP, search, account, wishlist, cart     | ✅ Complete |
+| 5     | Coupons, pricing service, multi-step checkout                       | ⏳ Next     |
+| 6     | Orders, payments, inventory reservation, notifications              | —           |
 | 7     | Admin panel and analytics                                           | —           |
 | 8     | Testing, security, performance and accessibility hardening          | —           |
+
+Cart was pulled forward from Phase 5 into Phase 4 — a storefront you can browse but
+cannot add to is not a coherent checkpoint. Phase 5 is therefore coupons, the pricing
+service and checkout.
 
 ---
 

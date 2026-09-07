@@ -104,7 +104,7 @@ export default function AdminMediaPage() {
                     {asset.key.split('/').pop()}
                   </p>
                   <p className="text-muted-foreground text-xs tabular">
-                    {formatBytes(asset.sizeBytes)} · {formatDate(asset.createdAt)}
+                    {formatBytes(asset.size)} · {formatDate(asset.createdAt)}
                   </p>
                   <div className="flex items-center gap-1">
                     <Button
@@ -157,7 +157,11 @@ export default function AdminMediaPage() {
             deleteMedia.mutate(deleting._id, {
               onSuccess: () => {
                 setDeleting(null);
-                void refetch();
+                // Deleting the only row on the last page leaves that page out
+                // of range, and an empty grid renders no pagination to get
+                // back with. Step back a page first.
+                if (items.length === 1 && page > 1) setPage((current) => current - 1);
+                else void refetch();
               },
             });
           }

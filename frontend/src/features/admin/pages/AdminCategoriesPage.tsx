@@ -219,8 +219,13 @@ export default function AdminCategoriesPage() {
         </div>
       )}
 
+      {/* Includes the closed state, so two consecutive root-level creates do
+          not share one mounted form carrying the first entry's values. */}
       <CategoryDialog
-        key={editing?._id ?? `new-${creatingUnder?._id ?? 'root'}`}
+        key={
+          editing?._id ??
+          (creatingUnder === undefined ? 'new-closed' : `new-${creatingUnder?._id ?? 'root'}`)
+        }
         category={editing}
         parent={creatingUnder}
         options={all}

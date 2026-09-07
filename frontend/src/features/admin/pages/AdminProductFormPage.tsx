@@ -22,6 +22,7 @@ import { ErrorState } from '@/components/common/ErrorState';
 import { Seo } from '@/components/common/Seo';
 import { ImageUploader } from '../components/ImageUploader';
 import { VariantManager } from '../components/VariantManager';
+import { TagsInput } from '../components/TagsInput';
 import {
   useAdminProduct,
   useBrandOptions,
@@ -93,6 +94,8 @@ function toFormValues(product: AdminProductDetail): FormValues {
         available: variant.stock.available,
         lowStockThreshold: variant.stock.lowStockThreshold,
       },
+      costPrice: variant.costPrice,
+      weightGrams: variant.weightGrams,
       images: variant.images ?? [],
       barcode: variant.barcode ?? '',
       isActive: variant.isActive,
@@ -176,6 +179,7 @@ export default function AdminProductFormPage() {
       images: 'media',
       options: 'variants',
       variants: 'variants',
+      slug: 'seo',
       seo: 'seo',
     };
     return [...new Set(Object.keys(errors).map((field) => map[field] ?? 'general'))];
@@ -185,7 +189,14 @@ export default function AdminProductFormPage() {
     (values) => {
       const payload = {
         ...values,
-        brand: values.brand || undefined,
+        // An empty slug means "derive it from the name", which the server does
+        // when the key is absent. Sending '' instead fails slugSchema and the
+        // form refuses to save with the help text still promising otherwise.
+        slug: values.slug?.trim() ? values.slug : undefined,
+        // '' is how this form clears a brand, and updateProduct normalises it
+        // to undefined. It must therefore survive as '' rather than being
+        // collapsed here — otherwise a brand can be set but never removed.
+        brand: values.brand ?? undefined,
         images: values.images.map((image, index) => ({ ...image, position: index })),
       };
 
@@ -419,19 +430,7 @@ export default function AdminProductFormPage() {
                   control={control}
                   name="tags"
                   render={({ field }) => (
-                    <Input
-                      id="tags"
-                      value={field.value.join(', ')}
-                      onChange={(event) =>
-                        field.onChange(
-                          event.target.value
-                            .split(',')
-                            .map((tag) => tag.trim())
-                            .filter(Boolean),
-                        )
-                      }
-                      placeholder="linen, summer, breathable"
-                    />
+                    <TagsInput value={field.value} onChange={field.onChange} />
                   )}
                 />
                 <p className="text-muted-foreground text-xs">Comma separated.</p>
@@ -532,8 +531,13 @@ export default function AdminProductFormPage() {
                       id="taxRate"
                       type="number"
                       step="1"
+                      // Round on the way in as well as on the way out. Showing
+                      // a rounded percent over an unrounded fraction meant the
+                      // field displayed 18 while storing 0.1799999.
                       value={Math.round(field.value * 100)}
-                      onChange={(event) => field.onChange(Number(event.target.value) / 100)}
+                      onChange={(event) =>
+                        field.onChange(Math.round(Number(event.target.value)) / 100)
+                      }
                     />
                   )}
                 />

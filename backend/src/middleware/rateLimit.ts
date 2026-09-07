@@ -14,7 +14,23 @@ const limiterLog = createLogger('rate-limit');
  * otherwise they fall back to per-process memory, which still stops naive abuse
  * but is per-instance. That is an accepted trade-off for a single-node dev setup.
  */
-function store() {
+/**
+ * A Redis store namespaced to one limiter.
+ *
+ * The `name` is not decoration. Every limiter here that does not define its own
+ * `keyGenerator` falls back to the client IP, so with a shared prefix all of
+ * them addressed the same Redis key and incremented one counter between them.
+ * The effective ceiling then became the *lowest* of the limits, applied to the
+ * *combined* traffic: in production a customer's 60th ordinary request
+ * exhausted the write budget, and reading the catalogue could lock them out of
+ * their basket. It also made the limiters impossible to reason about
+ * individually, which cost real debugging time.
+ *
+ * The in-memory fallback never had this problem — `express-rate-limit` gives
+ * each limiter its own MemoryStore — which is why it only bit where Redis was
+ * configured.
+ */
+function store(name: string) {
   if (!(cache instanceof RedisCache)) return undefined;
 
   // Captured out of the narrowed branch: TypeScript does not preserve an
@@ -22,7 +38,7 @@ function store() {
   const client = cache.raw;
   return new RedisStore({
     sendCommand: (...args: string[]) => client.call(...(args as [string, ...string[]])) as never,
-    prefix: 'rl:',
+    prefix: `rl:${name}:`,
   });
 }
 
@@ -67,7 +83,7 @@ export const globalLimiter = rateLimit({
   ...base,
   windowMs: 60_000,
   limit: GLOBAL_LIMIT,
-  store: store(),
+  store: store('global'),
 });
 
 /**
@@ -79,7 +95,7 @@ export const authLimiter = rateLimit({
   ...base,
   windowMs: 15 * 60_000,
   limit: 10,
-  store: store(),
+  store: store('auth'),
   keyGenerator: (req) => {
     const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase() : 'anon';
     // ipKeyGenerator normalises IPv6 to its /64 prefix — without it a single
@@ -94,7 +110,7 @@ export const emailLimiter = rateLimit({
   ...base,
   windowMs: 60 * 60_000,
   limit: 5,
-  store: store(),
+  store: store('email'),
   keyGenerator: (req) => `email:${ipKeyGenerator(req.ip ?? '')}`,
 });
 
@@ -113,7 +129,7 @@ export const searchLimiter = rateLimit({
   ...base,
   windowMs: 60_000,
   limit: isProduction ? 120 : 1_200,
-  store: store(),
+  store: store('search'),
 });
 
 /**
@@ -133,7 +149,7 @@ export const writeLimiter = rateLimit({
   ...base,
   windowMs: 60_000,
   limit: isProduction ? 60 : 600,
-  store: store(),
+  store: store('write'),
 });
 
 /**
@@ -144,6 +160,6 @@ export const checkoutLimiter = rateLimit({
   ...base,
   windowMs: 10 * 60_000,
   limit: 20,
-  store: store(),
+  store: store('checkout'),
   keyGenerator: (req) => `checkout:${req.user?.id ?? ipKeyGenerator(req.ip ?? '')}`,
 });

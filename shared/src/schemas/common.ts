@@ -9,6 +9,47 @@ import { PAGINATION } from '../constants/limits.js';
  * sanitizer middleware; whitelisting beats blacklisting.
  */
 
+/**
+ * Build the PATCH counterpart of a create schema.
+ *
+ * `.partial()` alone is not enough, and the difference is destructive. Zod
+ * applies `.partial()` *outside* `.default()`, so a defaulted field is still
+ * filled in when the key is absent:
+ *
+ *   createCategorySchema.partial().parse({ name: 'x' })
+ *   // → { name: 'x', order: 0, status: 'active', isFeatured: false }
+ *
+ * A service that merges the parsed object onto a document then writes those
+ * defaults over live data that the request never mentioned. On products this
+ * was catastrophic — `PATCH { name }` injected `variants: []`, `status:
+ * 'draft'`, `categories: []` and `images: []`, so renaming a product deleted
+ * every variant (with the `reserved` units held by in-flight checkouts),
+ * unpublished it, and stripped its categories and images.
+ *
+ * Stripping the defaults first makes absence mean absence: an omitted key
+ * stays omitted, and the service's `value === undefined` checks work as they
+ * read. Defaults belong on create, where there is no existing value to
+ * preserve — which is exactly why they must not survive into update.
+ */
+export function toUpdateSchema<T extends z.ZodRawShape>(
+  schema: z.ZodObject<T>,
+): z.ZodType<Partial<z.infer<z.ZodObject<T>>>> {
+  const withoutDefaults = Object.fromEntries(
+    Object.entries(schema.shape).map(([key, field]) => [
+      key,
+      field instanceof z.ZodDefault ? field.def.innerType : field,
+    ]),
+  ) as Record<string, z.ZodTypeAny>;
+
+  // The runtime shape is built dynamically, so the field types have to be
+  // reasserted. `Partial<infer<T>>` is exactly what stripping the defaults and
+  // making every key optional produces, and it keeps consumers typed on the
+  // real fields rather than a bare Record.
+  return z.object(withoutDefaults).partial() as unknown as z.ZodType<
+    Partial<z.infer<z.ZodObject<T>>>
+  >;
+}
+
 export const objectIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Must be a valid id');
 
 export const slugSchema = z

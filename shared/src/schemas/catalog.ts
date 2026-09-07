@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { moneySchema, objectIdSchema, seoSchema, slugSchema } from './common.js';
+import { moneySchema, objectIdSchema, seoSchema, slugSchema, toUpdateSchema } from './common.js';
 import { CONTENT_STATUSES, PRODUCT_STATUSES } from '../constants/enums.js';
 import { UPLOAD_LIMITS } from '../constants/limits.js';
 
@@ -27,7 +27,7 @@ export const createBrandSchema = z.object({
 });
 export type CreateBrandInput = z.infer<typeof createBrandSchema>;
 
-export const updateBrandSchema = createBrandSchema.partial();
+export const updateBrandSchema = toUpdateSchema(createBrandSchema);
 export type UpdateBrandInput = z.infer<typeof updateBrandSchema>;
 
 // ── Category ────────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ export const createCategorySchema = z.object({
 });
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 
-export const updateCategorySchema = createCategorySchema.partial();
+export const updateCategorySchema = toUpdateSchema(createCategorySchema);
 export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
 
 /** Drag-and-drop reordering sends the whole sibling list in its new order. */
@@ -211,8 +211,13 @@ export const createProductSchema = productBaseSchema
   );
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 
-/** Update accepts any subset of the base fields. */
-export const updateProductSchema = productBaseSchema.partial();
+/**
+ * Update accepts any subset of the base fields — and only the fields actually
+ * sent. See `toUpdateSchema`: a plain `.partial()` still injects every default,
+ * which on this schema meant a `PATCH { name }` wiped variants, images and
+ * categories and reset the product to `draft`.
+ */
+export const updateProductSchema = toUpdateSchema(productBaseSchema);
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 
 /** Bulk actions from the admin product table. */

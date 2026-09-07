@@ -559,7 +559,7 @@ describe('product editing', () => {
     expect(after?.variants[0]?.stock.available).toBe(10);
   });
 
-  it('still accepts an available adjustment from the product form', async () => {
+  it('ignores stock.available sent for an existing variant', async () => {
     const product = await makeProduct({
       name: 'Adjustable Thing',
       variants: [{ color: 'Blue', available: 5 }],
@@ -567,6 +567,11 @@ describe('product editing', () => {
     product.variants[0]!.stock.reserved = 2;
     await product.save();
 
+    // The form snapshots `available` when the page loads and re-sends it on
+    // every save. Honouring that writes a stale absolute value back over a
+    // number reservations and ledger adjustments have since moved — inventing
+    // units. Stock belongs to the inventory endpoints, which use a guarded
+    // `$inc` and write an audit row.
     const variantId = String(product.variants[0]!._id);
     const res = await admin.patch(`/admin/products/${String(product._id)}`, {
       variants: [
@@ -575,7 +580,7 @@ describe('product editing', () => {
           sku: product.variants[0]!.sku,
           optionValues: product.variants[0]!.optionValues,
           price: product.variants[0]!.price,
-          stock: { available: 12, lowStockThreshold: 5 },
+          stock: { available: 999, lowStockThreshold: 12 },
           isActive: true,
         },
       ],
@@ -583,8 +588,86 @@ describe('product editing', () => {
     expect(res.status).toBe(200);
 
     const after = await Product.findById(product._id).lean();
-    expect(after?.variants[0]?.stock.available).toBe(12);
+    expect(after?.variants[0]?.stock.available).toBe(5);
     expect(after?.variants[0]?.stock.reserved).toBe(2);
+    // The threshold IS the admin's to set, so that one still applies.
+    expect(after?.variants[0]?.stock.lowStockThreshold).toBe(12);
+  });
+
+  it('refuses to remove a variant that is holding reserved stock', async () => {
+    const product = await makeProduct({
+      name: 'Reserved Thing',
+      variants: [
+        { color: 'Green', available: 4 },
+        { color: 'Grey', available: 6 },
+      ],
+    });
+    product.variants[0]!.stock.reserved = 3;
+    await product.save();
+
+    // Removing this row would orphan the StockReservation that names it: the
+    // later commit or release matches nothing, writes no ledger entry, and
+    // raises no error, so the units vanish silently.
+    const keep = product.variants[1]!;
+    const res = await admin.patch(`/admin/products/${String(product._id)}`, {
+      variants: [
+        {
+          _id: String(keep._id),
+          sku: keep.sku,
+          optionValues: keep.optionValues,
+          price: keep.price,
+          stock: { available: 6, lowStockThreshold: 5 },
+          isActive: true,
+        },
+      ],
+    });
+
+    expect(res.status).toBe(409);
+    const after = await Product.findById(product._id).lean();
+    expect(after?.variants).toHaveLength(2);
+    expect(after?.variants[0]?.stock.reserved).toBe(3);
+  });
+
+  it('treats an unknown variant id as a new variant rather than reviving one', async () => {
+    const product = await makeProduct({
+      name: 'Ghost Thing',
+      variants: [{ color: 'Amber', available: 3 }],
+    });
+    const keep = product.variants[0]!;
+
+    // A stale form can carry the id of a variant that has since been deleted.
+    // Honouring it would resurrect the row with reserved and sold reset to
+    // zero, which is a fabricated history.
+    const res = await admin.patch(`/admin/products/${String(product._id)}`, {
+      options: [{ name: 'Color', values: ['Amber', 'Ivory'], position: 0 }],
+      variants: [
+        {
+          _id: String(keep._id),
+          sku: keep.sku,
+          optionValues: keep.optionValues,
+          price: keep.price,
+          stock: { available: 3, lowStockThreshold: 5 },
+          isActive: true,
+        },
+        {
+          _id: '507f1f77bcf86cd799439011',
+          sku: 'GHOST-IVORY',
+          optionValues: [{ name: 'Color', value: 'Ivory' }],
+          price: 1200,
+          stock: { available: 7, lowStockThreshold: 5 },
+          isActive: true,
+        },
+      ],
+    });
+    expect(res.status).toBe(200);
+
+    const after = await Product.findById(product._id).lean();
+    expect(after?.variants).toHaveLength(2);
+    const ghost = after?.variants.find((v) => v.sku === 'GHOST-IVORY');
+    expect(String(ghost?._id)).not.toBe('507f1f77bcf86cd799439011');
+    expect(ghost?.stock.available).toBe(7);
+    expect(ghost?.stock.reserved).toBe(0);
+    expect(ghost?.stock.sold).toBe(0);
   });
 
   it('adds a brand-new variant without an id', async () => {
@@ -620,5 +703,104 @@ describe('product editing', () => {
     expect(after?.variants).toHaveLength(2);
     expect(after?.variants[1]?.stock.available).toBe(8);
     expect(after?.variants[1]?.stock.reserved).toBe(0);
+  });
+});
+
+describe('partial updates', () => {
+  /**
+   * A PATCH must change only what it names.
+   *
+   * `updateProductSchema` was `productBaseSchema.partial()`, and Zod applies
+   * `.partial()` outside `.default()` — so a body of `{ name }` arrived at the
+   * service carrying `variants: []`, `status: 'draft'`, `categories: []` and
+   * `images: []`. Renaming a product therefore deleted every variant (with the
+   * units in-flight checkouts were holding), unpublished it, and stripped its
+   * categories and images. The service's `value === undefined` guards could not
+   * help: nothing was undefined.
+   *
+   * The test that already covered variant merging did not catch it, because it
+   * sent `variants` explicitly and only asserted on stock.
+   */
+  it('changes only the fields a PATCH actually names', async () => {
+    const category = await Category.create({
+      name: 'Keepme',
+      slug: 'keepme-cat',
+      path: 'keepme-cat',
+      level: 0,
+      ancestors: [],
+    });
+    const product = await makeProduct({
+      name: 'Untouched Thing',
+      status: 'active',
+      category: { _id: category._id, ancestors: [] },
+      variants: [{ color: 'Black', available: 10 }],
+    });
+    product.variants[0]!.stock.reserved = 4;
+    product.variants[0]!.stock.sold = 9;
+    product.images = [{ url: 'https://example.test/a.png', alt: '', position: 0 }] as never;
+    product.isFeatured = true;
+    product.taxRate = 0.05;
+    await product.save();
+
+    const res = await admin.patch(`/admin/products/${String(product._id)}`, {
+      name: 'Renamed Only',
+    });
+    expect(res.status).toBe(200);
+
+    const after = await Product.findById(product._id).lean();
+    expect(after?.name).toBe('Renamed Only');
+
+    // Everything the request did not mention must survive untouched.
+    expect(after?.variants).toHaveLength(1);
+    expect(after?.variants[0]?.stock.available).toBe(10);
+    expect(after?.variants[0]?.stock.reserved).toBe(4);
+    expect(after?.variants[0]?.stock.sold).toBe(9);
+    expect(after?.status).toBe('active');
+    expect(after?.categories).toHaveLength(1);
+    expect(after?.images).toHaveLength(1);
+    expect(after?.isFeatured).toBe(true);
+    expect(after?.taxRate).toBe(0.05);
+  });
+
+  it('still applies an explicit empty array when one is sent', async () => {
+    const product = await makeProduct({
+      name: 'Clearable Thing',
+      variants: [{ color: 'Red', available: 2 }],
+    });
+
+    // Absence means "leave alone"; an explicit [] means "clear it". The fix
+    // must not have turned the second into the first.
+    const res = await admin.patch(`/admin/products/${String(product._id)}`, { tags: [] });
+    expect(res.status).toBe(200);
+
+    const after = await Product.findById(product._id).lean();
+    expect(after?.tags).toEqual([]);
+    expect(after?.variants).toHaveLength(1);
+  });
+
+  it("leaves a category's position and status alone when only the name changes", async () => {
+    const category = await Category.create({
+      name: 'Ordered',
+      slug: 'ordered-cat',
+      path: 'ordered-cat',
+      level: 0,
+      ancestors: [],
+      order: 7,
+      status: 'inactive',
+      isFeatured: true,
+    });
+
+    const res = await admin.patch(`/admin/categories/${String(category._id)}`, {
+      name: 'Renamed Category',
+    });
+    expect(res.status).toBe(200);
+
+    const after = await Category.findById(category._id).lean();
+    expect(after?.name).toBe('Renamed Category');
+    // Renaming used to reset order to 0, reviving it to the top of the tree,
+    // and re-activate a deliberately hidden category.
+    expect(after?.order).toBe(7);
+    expect(after?.status).toBe('inactive');
+    expect(after?.isFeatured).toBe(true);
   });
 });

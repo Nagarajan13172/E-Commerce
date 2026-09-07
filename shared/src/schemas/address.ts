@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { phoneSchema } from './common.js';
+import { phoneSchema, toUpdateSchema } from './common.js';
 import { ADDRESS_LABELS } from '../constants/enums.js';
 
 export const addressSchema = z.object({
@@ -22,5 +22,5 @@ export const addressSchema = z.object({
 export type AddressInput = z.infer<typeof addressSchema>;
 export type AddressFormValues = z.input<typeof addressSchema>;
 
-export const updateAddressSchema = addressSchema.partial();
+export const updateAddressSchema = toUpdateSchema(addressSchema);
 export type UpdateAddressInput = z.infer<typeof updateAddressSchema>;

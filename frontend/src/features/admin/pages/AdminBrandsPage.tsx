@@ -163,8 +163,12 @@ export default function AdminBrandsPage() {
         />
       )}
 
+      {/* Keyed on the open/closed transition as well as the row, so a second
+          "New brand" gets a fresh form. With a constant 'new' key React reuses
+          the instance and react-hook-form's defaultValues — only read on
+          mount — leave the previous brand's details in the fields. */}
       <BrandDialog
-        key={editing?._id ?? 'new'}
+        key={editing?._id ?? (isCreating ? 'new-open' : 'new-closed')}
         brand={editing}
         open={editing !== null || isCreating}
         onClose={() => {

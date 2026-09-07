@@ -47,6 +47,7 @@ export interface AdminProductDetail {
     costPrice?: number;
     stock: { available: number; reserved: number; sold: number; lowStockThreshold: number };
     images: string[];
+    weightGrams?: number;
     barcode?: string;
     isActive: boolean;
   }[];
@@ -203,7 +204,8 @@ export interface MediaAsset {
   alt?: string;
   width?: number;
   height?: number;
-  sizeBytes?: number;
+  /** Bytes. Named `size` on the server — not `sizeBytes`. */
+  size?: number;
   createdAt: string;
 }
 

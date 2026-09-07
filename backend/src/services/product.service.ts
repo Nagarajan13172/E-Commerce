@@ -251,19 +251,64 @@ export async function updateProduct(
   if (input.variants) {
     const existing = new Map(product.variants.map((v) => [String(v._id), v]));
 
-    input.variants = input.variants.map((incoming) => {
-      const current = incoming._id ? existing.get(String(incoming._id)) : undefined;
-      if (!current) return incoming;
+    // Refuse to drop a variant that is holding stock for an in-flight checkout.
+    // The request would otherwise delete the row a `StockReservation` still
+    // names, and the later commit or release would silently match nothing:
+    // no ledger entry, no error, and the held units gone for good.
+    const removed = product.variants.filter(
+      (v) => !input.variants!.some((incoming) => String(incoming._id) === String(v._id)),
+    );
+    const blocking = removed.filter((v) => v.stock.reserved > 0);
+    if (blocking.length > 0) {
+      throw AppError.conflict(
+        `Cannot remove ${blocking.map((v) => v.sku).join(', ')} — ` +
+          `${blocking.length === 1 ? 'it is' : 'they are'} holding stock for an order in progress`,
+        ERROR_CODES.INSUFFICIENT_STOCK,
+      );
+    }
 
+    const seen = new Set<string>();
+
+    input.variants = input.variants.map((incoming) => {
+      const id = incoming._id ? String(incoming._id) : undefined;
+
+      // An id the document does not have is not addressing anything here. It
+      // came from a stale form or a bad client, and honouring it would revive a
+      // deleted variant with its counters reset to zero. Treat it as new.
+      const current = id ? existing.get(id) : undefined;
+
+      // Two entries claiming one id would fan a single variant's stock across
+      // both rows. Only the first keeps the identity.
+      if (id && current && !seen.has(id)) {
+        seen.add(id);
+        return {
+          ...incoming,
+          stock: {
+            // `available` is NOT taken from the request for an existing
+            // variant. The form snapshots it at page load, so saving an
+            // unrelated field would write a stale absolute value back over a
+            // number that reservations and ledger-tracked adjustments have
+            // since moved — inventing units that do not exist. Stock changes
+            // go through the inventory endpoints, which use a guarded `$inc`
+            // and write an audit row. The admin still owns the threshold.
+            available: current.stock.available,
+            lowStockThreshold: incoming.stock?.lowStockThreshold ?? current.stock.lowStockThreshold,
+            reserved: current.stock.reserved,
+            sold: current.stock.sold,
+          },
+        } as typeof incoming;
+      }
+
+      // A genuinely new variant: the admin sets its opening stock, and the
+      // derived counters start at zero.
+      const { _id: _ignored, ...fresh } = incoming;
       return {
-        ...incoming,
+        ...fresh,
         stock: {
-          // `available` and the threshold are the admin's to set; the other two
-          // belong to the reservation system alone.
-          available: incoming.stock?.available ?? current.stock.available,
-          lowStockThreshold: incoming.stock?.lowStockThreshold ?? current.stock.lowStockThreshold,
-          reserved: current.stock.reserved,
-          sold: current.stock.sold,
+          available: incoming.stock?.available ?? 0,
+          lowStockThreshold: incoming.stock?.lowStockThreshold ?? 5,
+          reserved: 0,
+          sold: 0,
         },
       } as typeof incoming;
     });

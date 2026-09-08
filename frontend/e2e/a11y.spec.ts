@@ -176,3 +176,52 @@ test.describe('dialogs', () => {
     });
   }
 });
+
+/**
+ * The uploader mid-upload.
+ *
+ * Progress rows exist only while a file is in flight, so every scan in this
+ * file — page sweeps, the form's tabs, the dialogs — is structurally incapable
+ * of seeing them. They were unnamed progressbars with no value: a wcag2a
+ * failure that automated coverage reported nothing about, because the coverage
+ * could never reach the state.
+ */
+test('upload progress is announced, not just drawn', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: STATE_FILES.admin });
+  const page = await context.newPage();
+
+  // Hold the presign open so the pending row stays on screen to be scanned.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/v1/admin/media/presign', async (route) => {
+    await held;
+    await route.continue();
+  });
+
+  await page.goto('/admin/products/new');
+  await pageReady(page);
+  await page.getByRole('tab', { name: 'Media' }).click();
+
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAIAAAD/gAIDAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAA' +
+      'IUlEQVR4nO3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAAOA3EMwAAeM0uYcAAAAASUVORK5CYII=',
+    'base64',
+  );
+  await page.setInputFiles('input[type=file]', {
+    name: 'progress.png',
+    mimeType: 'image/png',
+    buffer: png,
+  });
+
+  const bar = page.getByRole('progressbar');
+  await expect(bar).toBeVisible();
+  // A progressbar with no accessible name is exactly what axe objects to.
+  await expect(bar).toHaveAccessibleName(/uploading progress\.png/i);
+
+  expect(await scan(page), 'violations while an upload is in flight').toEqual([]);
+
+  release();
+  await context.close();
+});

@@ -74,7 +74,14 @@ export default defineConfig({
   webServer: {
     command: 'pnpm build && pnpm exec vite preview --port 4173 --strictPort',
     url: 'http://localhost:4173',
-    reuseExistingServer: !process.env.CI,
+    /*
+     * Never reuse. A preview server left running from an earlier session keeps
+     * serving the bundle it was started with, so edits appear to have no
+     * effect — a fix reads as still-broken and, far worse, a passing suite can
+     * be a statement about code that no longer exists. The rebuild costs well
+     * under a second; the confusion cost considerably more than that.
+     */
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

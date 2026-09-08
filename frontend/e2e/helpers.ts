@@ -32,10 +32,21 @@ export async function signIn(page: Page, account: { email: string; password: str
  * it simply hung until the test timed out. Playwright discourages it for
  * exactly this reason.
  *
- * A rendered heading is the honest signal: the route resolved, its lazy chunk
- * loaded, and the shell is painted. Anything a test needs beyond that should be
- * awaited explicitly by that test.
+ * A rendered heading says the route resolved and its lazy chunk loaded — but on
+ * most admin screens the `<h1>` sits ABOVE the `isPending` branch, so it paints
+ * while the page is still all skeletons. Waiting on the heading alone therefore
+ * handed the accessibility and responsive sweeps a loading state to measure,
+ * which has far less on it to fail: the "zero violations" those sweeps reported
+ * was partly a statement about skeletons.
+ *
+ * So this waits for the skeletons to go too. Anything a test needs beyond a
+ * loaded page should still be awaited explicitly by that test.
  */
 export async function pageReady(page: Page) {
   await page.locator('h1, [role="heading"][aria-level="1"]').first().waitFor({ state: 'visible' });
+  await page
+    .locator('[data-slot="skeleton"], .animate-pulse')
+    .first()
+    .waitFor({ state: 'detached', timeout: 15_000 })
+    .catch(() => undefined); // A page with no skeletons at all is already ready.
 }

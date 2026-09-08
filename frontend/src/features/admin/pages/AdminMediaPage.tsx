@@ -68,6 +68,7 @@ export default function AdminMediaPage() {
             get a URL to paste elsewhere, such as a brand logo. */}
         <ImageUploader
           images={[]}
+          max={Number.POSITIVE_INFINITY}
           onChange={(images: ProductImage[]) => {
             if (images.length > 0) void refetch();
           }}

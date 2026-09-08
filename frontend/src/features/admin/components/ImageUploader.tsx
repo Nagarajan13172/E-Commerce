@@ -19,6 +19,16 @@ interface ImageUploaderProps {
   images: ProductImage[];
   onChange: (images: ProductImage[]) => void;
   disabled?: boolean;
+  /**
+   * How many images may exist here in total.
+   *
+   * The product form's cap is per product. The media library has no such limit
+   * — it passes `images={[]}` because nothing is attached to a product there,
+   * which made the per-product cap read as "12 slots free" forever while still
+   * truncating any batch larger than 12 and blaming a product limit that did
+   * not apply.
+   */
+  max?: number;
 }
 
 interface Pending {
@@ -29,6 +39,9 @@ interface Pending {
 }
 
 const ALLOWED = UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES as readonly string[];
+
+/** Monotonic, so two files chosen in the same millisecond get distinct rows. */
+let uploadSeq = 0;
 
 /**
  * Drag-and-drop product images.
@@ -49,7 +62,12 @@ const ALLOWED = UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES as readonly string[];
  * gesture with no fallback would leave the first image — the one that becomes
  * the product thumbnail — unreachable for a keyboard user.
  */
-export function ImageUploader({ images, onChange, disabled }: ImageUploaderProps) {
+export function ImageUploader({
+  images,
+  onChange,
+  disabled,
+  max = UPLOAD_LIMITS.MAX_IMAGES_PER_PRODUCT,
+}: ImageUploaderProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -68,7 +86,25 @@ export function ImageUploader({ images, onChange, disabled }: ImageUploaderProps
   const [pending, setPending] = useState<Pending[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
-  const remaining = UPLOAD_LIMITS.MAX_IMAGES_PER_PRODUCT - images.length - pending.length;
+  /**
+   * Uploads still in flight, mirrored for the same reason as `imagesRef`.
+   *
+   * `remaining` derived from the `pending` STATE is a snapshot: two batches
+   * started before either re-rendered both saw the same number of free slots
+   * and each filled it, overshooting the cap.
+   */
+  const pendingRef = useRef(0);
+
+  /** False once unmounted, so a late upload does not write to a dead form. */
+  const isMounted = useRef(true);
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
+  const remaining = max - images.length - pending.length;
 
   const upload = useCallback(
     async (files: File[]) => {
@@ -85,16 +121,29 @@ export function ImageUploader({ images, onChange, disabled }: ImageUploaderProps
         }
         accepted.push(file);
       }
+      if (accepted.length === 0) return;
 
-      const room = accepted.slice(0, Math.max(0, remaining));
+      // Claimed against the refs, not the render's `remaining`, so two batches
+      // started in the same tick cannot each fill the last slot.
+      const free = Math.max(0, max - imagesRef.current.length - pendingRef.current);
+      const room = accepted.slice(0, free);
+
       if (room.length < accepted.length) {
-        toast.error(`A product may have at most ${UPLOAD_LIMITS.MAX_IMAGES_PER_PRODUCT} images`);
+        toast.error(
+          max === Infinity
+            ? 'Could not start those uploads'
+            : `Only ${max} image${max === 1 ? '' : 's'} allowed here — ${accepted.length - room.length} skipped`,
+        );
       }
 
+      pendingRef.current += room.length;
+
       for (const file of room) {
-        const id = `${file.name}-${Date.now()}-${Math.random()}`;
+        const id = `${file.name}-${uploadSeq++}`;
         setPending((current) => [...current, { id, name: file.name, percent: 0 }]);
 
+        // Each file settles independently: one failure must not abandon the
+        // rest of the batch, and every path must release its claimed slot.
         try {
           const presigned = await api.presignUpload({
             filename: file.name,
@@ -109,6 +158,11 @@ export function ImageUploader({ images, onChange, disabled }: ImageUploaderProps
 
           const { media } = await api.confirmUpload({ key: presigned.key, alt: '' });
 
+          // The component may have unmounted while this was in flight — a tab
+          // switch is enough. Writing then would push an image back into a form
+          // the admin has moved on from, resurrecting one they had deleted.
+          if (!isMounted.current) continue;
+
           const appended = [
             ...imagesRef.current,
             { media: media._id, url: media.url, alt: media.alt ?? '' },
@@ -118,12 +172,17 @@ export function ImageUploader({ images, onChange, disabled }: ImageUploaderProps
           setPending((current) => current.filter((p) => p.id !== id));
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Upload failed';
-          setPending((current) => current.map((p) => (p.id === id ? { ...p, error: message } : p)));
           toast.error(`${file.name}: ${message}`);
+          // Removed, not left behind wearing an error. A failed row that stayed
+          // in `pending` kept counting against the cap for the life of the
+          // page, so a few failures could disable the picker entirely.
+          if (isMounted.current) setPending((current) => current.filter((p) => p.id !== id));
+        } finally {
+          pendingRef.current = Math.max(0, pendingRef.current - 1);
         }
       }
     },
-    [onChange, remaining],
+    [max, onChange],
   );
 
   const move = (from: number, to: number) => {
@@ -202,7 +261,17 @@ export function ImageUploader({ images, onChange, disabled }: ImageUploaderProps
       </div>
 
       {pending.length > 0 && (
-        <ul className="space-y-2">
+        /*
+         * Announced, not just drawn.
+         *
+         * The bars alone told a screen-reader user nothing: no name, no value,
+         * and nothing to say an upload had even started. `aria-live="polite"`
+         * on the list reports each file as it appears and disappears, and each
+         * bar carries its own label and percentage — axe flags an unnamed
+         * progressbar, and no page scan would ever have caught it, because
+         * these rows only exist while an upload is in flight.
+         */
+        <ul className="space-y-2" aria-live="polite" aria-label="Uploads in progress">
           {pending.map((item) => (
             <li key={item.id} className="flex items-center gap-3 rounded-md border p-2.5 text-sm">
               {item.error ? (
@@ -214,7 +283,17 @@ export function ImageUploader({ images, onChange, disabled }: ImageUploaderProps
               {item.error ? (
                 <span className="text-destructive text-xs">{item.error}</span>
               ) : (
-                <Progress value={item.percent} className="w-32" />
+                <>
+                  <Progress
+                    value={item.percent}
+                    className="w-32"
+                    aria-label={`Uploading ${item.name}`}
+                    aria-valuenow={item.percent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  />
+                  <span className="sr-only">{item.percent}% complete</span>
+                </>
               )}
             </li>
           ))}

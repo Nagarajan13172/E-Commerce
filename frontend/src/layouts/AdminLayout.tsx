@@ -72,7 +72,12 @@ const NAV = [
     end: false,
     permission: 'category:write',
   },
-  { to: '/admin/brands', label: 'Brands', icon: Tag, end: false, permission: 'product:write' },
+  // `brand:write`, not `product:write`: that is the permission the server
+  // actually enforces on this screen's writes. They happen to be held by the
+  // same roles today, so the menu was not wrong in practice — but a new role
+  // holding one and not the other would have seen a menu whose every action
+  // 403s, or been hidden from a screen it was entitled to use.
+  { to: '/admin/brands', label: 'Brands', icon: Tag, end: false, permission: 'brand:write' },
   { to: '/admin/media', label: 'Media', icon: Images, end: false, permission: 'media:write' },
   {
     to: '/admin/payments',

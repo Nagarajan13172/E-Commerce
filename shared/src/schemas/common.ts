@@ -31,14 +31,53 @@ import { PAGINATION } from '../constants/limits.js';
  * read. Defaults belong on create, where there is no existing value to
  * preserve — which is exactly why they must not survive into update.
  */
+/**
+ * Remove `.default()` wherever it appears, including inside arrays and nested
+ * objects.
+ *
+ * Stripping only the top level is not enough. `productVariantSchema` carries
+ * `stock: variantStockSchema.default({ available: 0, lowStockThreshold: 5 })`
+ * *inside* the array element, so a variant sent without a `stock` object still
+ * arrived carrying one — and the service's `incoming.stock?.x ?? current.x`
+ * fallback, which reads as though it handles omission, was dead code. Omitting
+ * `stock` silently reset the variant's low-stock threshold to 5.
+ */
+function stripDefaults(field: z.ZodTypeAny): z.ZodTypeAny {
+  // Optional, not bare: a default means "this key may be omitted". Removing it
+  // without making the field optional turns omission from allowed into a
+  // validation error, which would reject every variant sent without a `stock`
+  // object rather than leaving its stored value alone.
+  if (field instanceof z.ZodDefault) {
+    return z.optional(stripDefaults(field.def.innerType as z.ZodTypeAny));
+  }
+
+  if (field instanceof z.ZodOptional) {
+    return z.optional(stripDefaults(field.def.innerType as z.ZodTypeAny));
+  }
+
+  if (field instanceof z.ZodArray) {
+    return z.array(stripDefaults(field.def.element as z.ZodTypeAny));
+  }
+
+  if (field instanceof z.ZodObject) {
+    return z.object(
+      Object.fromEntries(
+        Object.entries(field.shape).map(([key, inner]) => [
+          key,
+          stripDefaults(inner as z.ZodTypeAny),
+        ]),
+      ),
+    );
+  }
+
+  return field;
+}
+
 export function toUpdateSchema<T extends z.ZodRawShape>(
   schema: z.ZodObject<T>,
 ): z.ZodType<Partial<z.infer<z.ZodObject<T>>>> {
   const withoutDefaults = Object.fromEntries(
-    Object.entries(schema.shape).map(([key, field]) => [
-      key,
-      field instanceof z.ZodDefault ? field.def.innerType : field,
-    ]),
+    Object.entries(schema.shape).map(([key, field]) => [key, stripDefaults(field as z.ZodTypeAny)]),
   ) as Record<string, z.ZodTypeAny>;
 
   // The runtime shape is built dynamically, so the field types have to be

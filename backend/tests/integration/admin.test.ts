@@ -762,6 +762,39 @@ describe('partial updates', () => {
     expect(after?.taxRate).toBe(0.05);
   });
 
+  it("leaves a variant's low-stock threshold alone when stock is omitted", async () => {
+    const product = await makeProduct({
+      name: 'Threshold Thing',
+      variants: [{ color: 'Teal', available: 6 }],
+    });
+    product.variants[0]!.stock.lowStockThreshold = 25;
+    await product.save();
+
+    const variant = product.variants[0]!;
+    const res = await admin.patch(`/admin/products/${String(product._id)}`, {
+      variants: [
+        {
+          _id: String(variant._id),
+          sku: variant.sku,
+          optionValues: variant.optionValues,
+          price: variant.price,
+          isActive: true,
+          // No `stock` key at all.
+        },
+      ],
+    });
+    expect(res.status).toBe(200);
+
+    // `variantStockSchema.default(...)` sits INSIDE the array element, so
+    // stripping defaults at the top level alone left it injecting
+    // `{ available: 0, lowStockThreshold: 5 }` — which made the service's
+    // `incoming.stock?.x ?? current.x` fallback dead code and quietly reset
+    // the threshold on any request that omitted stock.
+    const after = await Product.findById(product._id).lean();
+    expect(after?.variants[0]?.stock.lowStockThreshold).toBe(25);
+    expect(after?.variants[0]?.stock.available).toBe(6);
+  });
+
   it('still applies an explicit empty array when one is sent', async () => {
     const product = await makeProduct({
       name: 'Clearable Thing',
